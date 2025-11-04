@@ -1,0 +1,137 @@
+# Amvera Deployment Configuration
+# Этот файл описывает, как развернуть приложение на Amvera
+
+---
+# Версия конфигурации
+version: 1
+
+# Описание приложения
+meta:
+  name: "Reyting Dashboard"
+  description: "Interactive dashboard for assessing effectiveness of municipal heads in Lipetsk region"
+  version: "1.0.0"
+
+# Переменные окружения
+env:
+  # Database
+  DATABASE_URL: "postgresql://reyting_user:${DB_PASSWORD}@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+
+  # Backend
+  DEBUG: "False"
+  API_TITLE: "Dashboard API"
+  API_VERSION: "1.0.0"
+
+  # Frontend
+  REACT_APP_API_URL: "https://${APP_DOMAIN}/api"
+
+# Сервисы
+services:
+  # Backend сервис
+  backend:
+    # Источник - на основе Dockerfile
+    dockerfile: "backend/Dockerfile"
+    context: "."
+
+    # Порт, на котором слушает сервис
+    port: 8000
+
+    # Количество реплик
+    replicas: 1
+
+    # Ресурсы
+    resources:
+      memory: "512Mi"
+      cpu: "0.5"
+
+    # Переменные окружения для backend
+    env:
+      DATABASE_URL: "postgresql://reyting_user:${DB_PASSWORD}@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+      DEBUG: "False"
+      PYTHONUNBUFFERED: "1"
+
+    # Здоровье проверка
+    healthcheck:
+      path: "/health"
+      interval: 30
+      timeout: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    # Команда запуска
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+    # Переменные секреты
+    secrets:
+      - DB_PASSWORD
+
+  # Frontend сервис
+  frontend:
+    # Статический сайт - можно использовать nginx
+    dockerfile: "frontend/Dockerfile"
+    context: "."
+
+    port: 3000
+    replicas: 1
+
+    resources:
+      memory: "256Mi"
+      cpu: "0.25"
+
+    env:
+      REACT_APP_API_URL: "https://${APP_DOMAIN}/api"
+
+    healthcheck:
+      path: "/"
+      interval: 30
+      timeout: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+# Маршрутизация
+routing:
+  # API маршруты
+  - path: "/api/*"
+    service: "backend"
+    rewrite: "/"
+
+  # Frontend маршруты
+  - path: "/*"
+    service: "frontend"
+
+# Переменные секреты (должны быть установлены в консоли Amvera)
+secrets:
+  DB_PASSWORD:
+    description: "PostgreSQL password for reyting_user"
+    required: true
+
+# Базы данных
+databases:
+  # Уже создана вручную в консоли Amvera
+  postgresql:
+    host: "amvera-alex1976-cnpq-reyting-mo-rw"
+    port: 5432
+    name: "reytingdb"
+    user: "reyting_user"
+    # password должна быть в переменной DB_PASSWORD
+
+# Хранилище (опционально)
+storage:
+  uploads:
+    mount_path: "/app/uploads"
+    size: "10Gi"
+
+# Домены
+domains:
+  - "reyting.amvera.ru"  # Замените на ваш домен
+  - "aleksey341.github.io/Reyting"  # GitHub Pages
+
+# Логирование
+logging:
+  level: "INFO"
+  format: "json"
+
+# Бэкапы (опционально)
+backups:
+  enabled: true
+  schedule: "0 2 * * *"  # 02:00 каждый день
+  retention_days: 30
