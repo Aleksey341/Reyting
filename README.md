@@ -65,30 +65,72 @@
 
 ## Быстрый старт
 
-### С Docker Compose (рекомендуется)
+### Подключение к Amvera PostgreSQL
+
+**Параметры подключения:**
+```
+Host: amvera-alex1976-cnpq-reyting-mo-rw
+Port: 5432
+Database: reytingdb
+User: reyting_user
+Password: [получить в Amvera консоли]
+```
+
+**Примеры подключения:**
+
+Python (SQLAlchemy):
+```python
+engine = create_engine(
+    "postgresql+psycopg2://reyting_user:<password>@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb",
+    pool_pre_ping=True
+)
+```
+
+Node.js (pg):
+```javascript
+const { Pool } = require('pg');
+const pool = new Pool({
+  host: 'amvera-alex1976-cnpq-reyting-mo-rw',
+  port: 5432,
+  database: 'reytingdb',
+  user: 'reyting_user',
+  password: process.env.DB_PASSWORD,
+});
+```
+
+psql (консоль):
+```bash
+psql "postgresql://reyting_user:<password>@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+```
+
+### С Docker Compose (локально)
 
 ```bash
 # Клонировать репозиторий
-git clone <repo-url>
-cd Проект
+git clone https://github.com/Aleksey341/Reyting.git
+cd Reyting
 
-# Запустить все сервисы
+# Запустить все сервисы (используется локальный PostgreSQL)
 docker-compose up --build
 
 # Приложение будет доступно:
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000
 # API Docs: http://localhost:8000/docs
-# Database: localhost:5432
+# Database: localhost:5432 (Docker)
 ```
 
-### Локальная разработка
+### Локальная разработка с Amvera БД
 
 **Backend:**
 ```bash
 cd backend
 pip install -r requirements.txt
-export DATABASE_URL="postgresql://user:pass@localhost:5432/dashboard_db"
+
+# Установить переменную окружения с паролем Amvera
+export DATABASE_URL="postgresql://reyting_user:<password>@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+
+# Запустить сервер
 uvicorn main:app --reload
 ```
 

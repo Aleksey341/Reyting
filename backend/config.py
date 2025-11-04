@@ -5,10 +5,12 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application configuration"""
 
-    # Database
+    # Database Configuration
+    # For Amvera PostgreSQL:
+    # postgresql://reyting_user:<password>@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb
     database_url: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://dashboard_user:dashboard_password@localhost:5432/dashboard_db"
+        "postgresql://reyting_user:password@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
     )
 
     # API
@@ -16,12 +18,14 @@ class Settings(BaseSettings):
     api_version: str = "1.0.0"
     api_description: str = "API для интерактивного дашборда оценки эффективности глав МО"
 
-    # CORS
+    # CORS - Add production domains
     cors_origins: list = [
         "http://localhost",
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
+        "https://aleksey341.github.io",
+        "https://aleksey341.github.io/Reyting",
     ]
 
     # File uploads
