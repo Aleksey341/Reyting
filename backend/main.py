@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
+import os
 from config import settings
 from database import engine, Base
 
@@ -14,12 +15,22 @@ from routes import (
     upload_routes,
 )
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging with detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger(__name__)
 
+# Log startup info
+logger.info("Starting Reyting Dashboard API")
+logger.info(f"Environment: DEBUG={os.getenv('DEBUG', 'false')}")
+logger.info(f"ALLOWED_ORIGINS={os.getenv('ALLOWED_ORIGINS', '*')}")
+
 # Create tables
+logger.info("Creating database tables if not exist...")
 Base.metadata.create_all(bind=engine)
+logger.info("✓ Database tables ready")
 
 # Create app
 app = FastAPI(
@@ -28,10 +39,19 @@ app = FastAPI(
     description=settings.api_description,
 )
 
+# Configure CORS from environment
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins_str == "*":
+    cors_origins = ["*"]
+else:
+    cors_origins = [o.strip() for o in allowed_origins_str.split(",")]
+
+logger.info(f"CORS configured for origins: {cors_origins}")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
