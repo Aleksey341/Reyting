@@ -1,0 +1,166 @@
+# Amvera Configuration для Backend
+# Развёртывание FastAPI приложения на Amvera
+
+---
+version: 1
+
+meta:
+  name: "reyting-backend"
+  description: "FastAPI backend for governance effectiveness dashboard"
+
+# Используем Docker
+env: docker
+tool: docker
+
+build:
+  # Сборщик: docker
+  tool: docker
+
+  # Dockerfile находится в текущей папке (backend/)
+  dockerfile: Dockerfile
+
+  # Контекст сборки - родительская папка (где находится весь проект)
+  context: ..
+
+  # Аргументы сборки (опционально)
+  # args:
+  #   - name: PYTHON_VERSION
+  #     value: "3.11"
+
+# Конфигурация запуска контейнера
+run:
+  # Использовать собранный образ
+  image: "${BUILD_IMAGE}"
+
+  # Команда запуска (переопределяет CMD из Dockerfile)
+  command:
+    - "uvicorn"
+    - "main:app"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "8000"
+    - "--reload"
+
+  # Аргументы (если нужны)
+  # args: []
+
+  # Постоянное хранилище для uploads
+  persistenceMount:
+    - path: /app/uploads
+      size: 10Gi
+
+  # Порт контейнера (FastAPI слушает на 8000)
+  containerPort: 8000
+
+  # Переменные окружения
+  env:
+    # Database connection
+    - name: DATABASE_URL
+      value: "postgresql://reyting_user:${DB_PASSWORD}@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+
+    # Application settings
+    - name: DEBUG
+      value: "False"
+    - name: API_TITLE
+      value: "Dashboard API"
+    - name: API_VERSION
+      value: "1.0.0"
+
+    # Python settings
+    - name: PYTHONUNBUFFERED
+      value: "1"
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
+
+  # Ресурсы контейнера
+  resources:
+    # Память (для FastAPI обычно 512Mi достаточно)
+    memory: "512Mi"
+    # CPU (0.5 = половина ядра)
+    cpu: "0.5"
+
+  # Проверка здоровья контейнера
+  healthcheck:
+    # Endpoint для проверки
+    path: /health
+    # Интервал между проверками (секунды)
+    interval: 30
+    # Таймаут одной проверки (секунды)
+    timeout: 10
+    # Сколько успешных проверок подряд нужно для считания здоровым
+    successThreshold: 1
+    # Сколько неудачных проверок подряд нужно для считания нездоровым
+    failureThreshold: 3
+
+  # Проксирование сигналов
+  # Важно для корректного завершения приложения
+  signalProxy: true
+
+# Маршрутизация входящего трафика
+routing:
+  # Все запросы на /api и подпапки идут в backend
+  - path: "/api"
+    targetPort: 8000
+    rewrite: ""  # Не переписываем путь
+
+  # API документация
+  - path: "/docs"
+    targetPort: 8000
+    rewrite: ""
+
+  - path: "/redoc"
+    targetPort: 8000
+    rewrite: ""
+
+  - path: "/openapi.json"
+    targetPort: 8000
+    rewrite: ""
+
+# Домены
+domains:
+  - "api.reyting.amvera.ru"      # Замените на ваш домен
+
+# Переменные с секретными данными
+secrets:
+  # Пароль базы данных
+  DB_PASSWORD:
+    description: "PostgreSQL password for reyting_user"
+    required: true
+    # Установите в консоли Amvera в разделе Environment Variables
+
+# Логирование
+logging:
+  # Уровень логирования: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  # Формат: text или json
+  format: "json"
+
+# Лимиты и таймауты
+limits:
+  # Максимальное время на запуск контейнера (минуты)
+  startupTimeout: 5
+  # Время на корректное завершение перед kill (секунды)
+  gracefulShutdownTimeout: 30
+
+# Бэкапы (опционально)
+backups:
+  enabled: false
+  # schedule: "0 3 * * *"  # 03:00 каждый день
+  # retention_days: 30
+  # path: /app/uploads
+
+# Автоскейлинг (опционально, платные тарифы)
+autoscaling:
+  enabled: false
+  # minReplicas: 1
+  # maxReplicas: 3
+  # targetCPUUtilization: 70
+  # targetMemoryUtilization: 80
+
+# CORS настройки (если требуется)
+# Обычно настраивается в backend коде (config.py)
+
+# Переменные, которые нужно установить в консоли Amvera:
+# 1. DB_PASSWORD - пароль от PostgreSQL
+# 2. Опционально: ENVIRONMENT=production

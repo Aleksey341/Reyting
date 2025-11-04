@@ -1,0 +1,121 @@
+# Amvera Configuration File
+# Этот файл описывает конфигурацию для развёртывания приложения на Amvera
+
+---
+version: 1
+
+# Метаинформация о приложении
+meta:
+  name: "reyting"
+  description: "Interactive dashboard for assessing governance effectiveness"
+
+# Окружение: Docker
+env: docker
+
+# Инструмент: Docker
+tool: docker
+
+# Конфигурация сборки
+build:
+  # Инструмент сборки: docker
+  tool: docker
+
+  # Dockerfile для сборки образа
+  dockerfile: Dockerfile
+
+  # Контекст сборки (текущая папка)
+  context: .
+
+# Конфигурация запуска
+run:
+  # Образ для запуска
+  image: "${BUILD_IMAGE}"  # Автоматически используется собранный образ
+
+  # Команда запуска (опционально, если не указана в Dockerfile)
+  # command: []
+
+  # Аргументы команды (опционально)
+  # args: []
+
+  # Постоянное хранилище (persist data между перезагрузками)
+  persistenceMount:
+    - path: /data
+      size: 10Gi  # 10 гигабайт
+
+  # Порт контейнера
+  containerPort: 80
+
+  # Переменные окружения
+  env:
+    # Database
+    - name: DATABASE_URL
+      value: "postgresql://reyting_user:${DB_PASSWORD}@amvera-alex1976-cnpq-reyting-mo-rw:5432/reytingdb"
+
+    # Backend
+    - name: DEBUG
+      value: "False"
+    - name: API_TITLE
+      value: "Dashboard API"
+    - name: PYTHONUNBUFFERED
+      value: "1"
+
+  # Ресурсы контейнера
+  resources:
+    memory: "512Mi"
+    cpu: "0.5"
+
+  # Healthcheck (проверка здоровья контейнера)
+  healthcheck:
+    # Путь для проверки
+    path: /health
+    # Интервал проверки (секунды)
+    interval: 30
+    # Таймаут проверки (секунды)
+    timeout: 10
+    # Количество успешных проверок для считания контейнера здоровым
+    successThreshold: 1
+    # Количество неудачных проверок для считания контейнера нездоровым
+    failureThreshold: 3
+
+# Маршрутизация входящего трафика
+routing:
+  # Основной маршрут
+  - path: "/"
+    targetPort: 80
+    rewrite: "/"
+
+# Внешний доступ
+domains:
+  - "reyting.amvera.ru"  # Замените на ваш домен
+
+# Секреты (переменные с чувствительными данными)
+secrets:
+  # Пароль базы данных - должен быть установлен в консоли Amvera
+  DB_PASSWORD:
+    description: "PostgreSQL password for reyting_user"
+    required: true
+
+# Логирование
+logging:
+  level: "INFO"
+  format: "text"
+
+# Лимиты и ограничения
+limits:
+  # Максимальное время запуска контейнера (минуты)
+  startupTimeout: 5
+  # Максимальное время корректного завершения (секунды)
+  gracefulShutdownTimeout: 30
+
+# Бэкапы (опционально)
+backups:
+  enabled: false
+  # schedule: "0 2 * * *"  # 02:00 каждый день
+  # retention_days: 30
+
+# Автоскейлинг (опционально)
+autoscaling:
+  enabled: false
+  # minReplicas: 1
+  # maxReplicas: 3
+  # targetCPUUtilization: 70
