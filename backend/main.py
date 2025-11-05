@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import logging
 import os
 from config import settings
@@ -32,11 +32,14 @@ logger.info("Creating database tables if not exist...")
 Base.metadata.create_all(bind=engine)
 logger.info("✓ Database tables ready")
 
-# Create app
+# Create app with /api docs path
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     description=settings.api_description,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+    redoc_url="/api/redoc",
 )
 
 # Configure CORS from environment
@@ -58,19 +61,37 @@ app.add_middleware(
 )
 
 
-# Health check endpoint
+# Health check endpoint (root level for container healthchecks)
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    """Health check endpoint for Amvera/K8s probes"""
+    return {"status": "ok", "service": "reyting-api"}
 
 
+# Root endpoint (redirect to API docs)
 @app.get("/")
 async def root():
+    """Redirect root to API documentation"""
+    return RedirectResponse(url="/api/docs")
+
+
+# API info endpoint
+@app.get("/api")
+async def api_info():
+    """API information and endpoints"""
     return {
-        "message": "Dashboard API",
+        "service": "Reyting Dashboard API",
         "version": settings.api_version,
-        "docs": "/docs",
+        "docs": "/api/docs",
+        "openapi": "/api/openapi.json",
         "health": "/health",
+        "endpoints": {
+            "rating": "/api/rating",
+            "indicators": "/api/indicators",
+            "map": "/api/map",
+            "methodology": "/api/methodology",
+            "upload": "/api/upload",
+        }
     }
 
 
