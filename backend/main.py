@@ -31,8 +31,12 @@ logger.info(f"ALLOWED_ORIGINS={os.getenv('ALLOWED_ORIGINS', '*')}")
 
 # Create tables
 logger.info("Creating database tables if not exist...")
-Base.metadata.create_all(bind=engine)
-logger.info("✓ Database tables ready")
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("✓ Database tables ready")
+except Exception as e:
+    logger.warning(f"⚠ Database connection failed: {e}")
+    logger.warning("⚠ App will start without database (API endpoints will not work)")
 
 # Create app with /api docs path
 app = FastAPI(
