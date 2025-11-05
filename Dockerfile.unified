@@ -14,14 +14,25 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build
 
-# Copy frontend files
+# Copy frontend package files
 COPY frontend/package*.json ./
-COPY frontend/.env.production .env
 
-# Install dependencies and build
-RUN npm ci --only=production
+# Install dependencies with retry and cache cleaning
+RUN npm cache clean --force && \
+    npm install --legacy-peer-deps || \
+    (sleep 5 && npm install --legacy-peer-deps)
+
+# Copy frontend source code
 COPY frontend/ ./
+
+# Copy production environment
+COPY frontend/.env.production .env.production
+
+# Build frontend
 RUN npm run build
+
+# Verify build output
+RUN ls -la dist/ && echo "✓ Frontend built successfully"
 
 # Результат: /build/dist содержит собранный frontend
 
@@ -47,6 +58,12 @@ COPY backend/ ./
 
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /build/dist ./static
+
+# Verify static files were copied
+RUN ls -la /app/static/ && \
+    test -f /app/static/index.html && \
+    echo "✓ Static files copied successfully" || \
+    (echo "✗ ERROR: Static files not found!" && exit 1)
 
 # Environment variables
 ENV PORT=80
