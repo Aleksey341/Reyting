@@ -12,6 +12,14 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     minify: 'terser',
+    rollupOptions: {
+      output: {
+        // Optimized output for better caching
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash][extname]',
+      },
+    },
   },
   define: {
     'process.env': process.env,

@@ -22,7 +22,7 @@ app:
       - name: DEBUG
         value: "false"
       - name: ALLOWED_ORIGINS
-        value: "https://reyting-alex1976.amvera.io"
+        value: "https://reyting-frontend-alex1976.amvera.io,https://reyting-alex1976.amvera.io"
   domains:
     - host: reyting-alex1976.amvera.io
       routes:
