@@ -42,14 +42,15 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
-# Configure CORS from environment
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
-if allowed_origins_str == "*":
-    cors_origins = ["*"]
-else:
-    cors_origins = [o.strip() for o in allowed_origins_str.split(",")]
+# Configure CORS from environment (narrow CORS for production security)
+# ALLOWED_ORIGINS should be comma-separated list of domains (NOT wildcard for production)
+# Example: https://reyting-frontend-alex1976.amvera.io,https://reyting-alex1976.amvera.io
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "https://localhost:3000")
+cors_origins = [o.strip() for o in allowed_origins_str.split(",")]
 
-logger.info(f"CORS configured for origins: {cors_origins}")
+logger.info(f"✓ CORS configured for {len(cors_origins)} origin(s)")
+for origin in cors_origins:
+    logger.info(f"  - {origin}")
 
 # Add CORS middleware
 app.add_middleware(

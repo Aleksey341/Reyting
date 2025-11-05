@@ -1,3 +1,5 @@
+# Amvera Backend Configuration
+# Production deployment with narrow CORS (specific domains only)
 version: "1"
 app:
   name: reyting
