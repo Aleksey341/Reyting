@@ -21,7 +21,7 @@ build:
   tool: docker
 
   # Dockerfile для сборки образа
-  dockerfile: Dockerfile
+  dockerfile: Dockerfile.unified
 
   # Контекст сборки (текущая папка)
   context: .
@@ -58,6 +58,10 @@ run:
       value: "Dashboard API"
     - name: PYTHONUNBUFFERED
       value: "1"
+    - name: STATIC_DIR
+      value: "/app/static"
+    - name: ALLOWED_ORIGINS
+      value: "*"
 
   # Ресурсы контейнера
   resources:
