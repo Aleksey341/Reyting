@@ -4,19 +4,19 @@ app:
   runtime: docker
   build:
     dockerfile: frontend/Dockerfile
+    context: .
   run:
-    containerPort: 3000
-    command:
-      - serve
-      - "-s"
-      - build
-      - "-l"
-      - "3000"
+    # Nginx слушает на порту 80 внутри контейнера
+    containerPort: 80
+    # Команда не требуется - Nginx запускается из Dockerfile
+    # image использует встроенный Dockerfile CMD
     env:
-      - name: VITE_API_BASE
-        value: "https://reyting-alex1976.amvera.io/api"
+      # Nginx прокси делает запросы к бэкенду через /api
+      # API_BASE переменная не нужна (Nginx берёт из conf)
+      - name: NODE_ENV
+        value: "production"
   domains:
     - host: reyting-frontend-alex1976.amvera.io
       routes:
         - path: /
-          port: 3000
+          port: 80
