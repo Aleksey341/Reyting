@@ -1,36 +1,21 @@
-FROM node:18-alpine AS builder
-
+# Build stage
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
+COPY package.json package-lock.json* ./
 RUN npm ci
-
-# Copy source
 COPY . .
-
-# Build
+# Vite reads VITE_* from .env and environment during build
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine
+# Runtime stage - Nginx for static files + proxy to backend
+FROM nginx:alpine
+# Copy Nginx config (proxies /api to backend)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy built frontend static files
+COPY --from=build /app/dist /usr/share/nginx/html
 
-WORKDIR /app
-
-# Install serve
-RUN npm install -g serve
-
-# Copy built app from builder (Vite outputs to dist/, but serve expects build/)
-COPY --from=builder /app/dist ./build
-
-# Expose port
-EXPOSE 3000
+EXPOSE 80
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
-
-# Serve the built frontend
-CMD ["serve", "-s", "build", "-l", "3000"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1

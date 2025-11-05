@@ -1,34 +1,23 @@
 {
-  "name": "dashboard-frontend",
-  "version": "1.0.0",
-  "description": "Interactive dashboard for Lipetsk region governance effectiveness",
+  "name": "reyting-frontend",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
-    "axios": "^1.6.2",
-    "maplibre-gl": "^3.6.0",
-    "react-map-gl": "^7.1.5",
-    "echarts": "^5.4.3",
-    "recharts": "^2.10.3",
-    "tailwindcss": "^3.3.6",
-    "react-icons": "^4.12.0",
-    "date-fns": "^2.30.0"
-  },
-  "devDependencies": {
-    "vite": "^5.0.0",
-    "@vitejs/plugin-react": "^4.2.0",
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
-    "tailwindcss": "^3.3.6",
-    "postcss": "^8.4.31",
-    "autoprefixer": "^10.4.16"
-  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --port 3000"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.6"
   }
 }
