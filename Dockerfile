@@ -14,13 +14,16 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build
 
+# Install yarn globally
+RUN corepack enable && corepack prepare yarn@stable --activate
+
 # Copy frontend package files
 COPY frontend/package*.json ./
+COPY frontend/yarn.lock* ./
 
-# Install dependencies with retry and cache cleaning
-RUN npm cache clean --force && \
-    npm install --legacy-peer-deps || \
-    (sleep 5 && npm install --legacy-peer-deps)
+# Install dependencies with yarn (more stable than npm)
+RUN yarn install --frozen-lockfile --network-timeout 100000 || \
+    yarn install --network-timeout 100000
 
 # Copy frontend source code
 COPY frontend/ ./
@@ -29,7 +32,7 @@ COPY frontend/ ./
 COPY frontend/.env.production .env.production
 
 # Build frontend
-RUN npm run build
+RUN yarn build
 
 # Verify build output
 RUN ls -la dist/ && echo "✓ Frontend built successfully"
