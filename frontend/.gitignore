@@ -5,7 +5,9 @@ dist-ssr/
 
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json - required for Docker npm ci
+# Commented to enable reproducible builds in containers
+# package-lock.json
 yarn.lock
 
 # Environment variables
