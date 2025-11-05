@@ -21,7 +21,7 @@ build:
   tool: docker
 
   # Dockerfile для сборки образа
-  dockerfile: Dockerfile.unified
+  dockerfile: Dockerfile
 
   # Контекст сборки (текущая папка)
   context: .
