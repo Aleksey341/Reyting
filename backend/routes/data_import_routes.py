@@ -7,6 +7,7 @@ from sqlalchemy import text
 import logging
 import pandas as pd
 import io
+import json
 
 from database import get_db
 from models import DimMO, DimPeriod, DimIndicator, DimMethodology, FactIndicator
@@ -459,6 +460,57 @@ async def migrate_add_geojson_column(db: Session = Depends(get_db)):
         logger.error(f"Error adding geojson column: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error adding geojson column: {str(e)}")
+
+
+@router.post("/upload-real-boundaries")
+async def upload_real_boundaries(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload real GeoJSON boundaries from file.
+    Expects JSON file with structure: {"МО_name": {"type": "Polygon", "coordinates": [...]}}
+    """
+    try:
+        # Read uploaded file
+        content = await file.read()
+        boundaries = json.loads(content.decode('utf-8'))
+
+        logger.info(f"Uploading real boundaries from file: {file.filename}")
+        logger.info(f"Found {len(boundaries)} municipalities in file")
+
+        updated = 0
+        not_found = []
+
+        for mo_name, geojson_data in boundaries.items():
+            # Find municipality in database
+            mo = db.query(DimMO).filter(DimMO.mo_name == mo_name).first()
+
+            if mo:
+                mo.geojson = geojson_data
+                updated += 1
+                logger.info(f"Updated {mo_name}")
+            else:
+                not_found.append(mo_name)
+                logger.warning(f"Municipality not found in DB: {mo_name}")
+
+        db.commit()
+
+        return {
+            "status": "success",
+            "message": f"Uploaded real boundaries for {updated} municipalities",
+            "updated": updated,
+            "not_found": not_found,
+            "note": "Real boundaries from OpenStreetMap"
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error uploading boundaries: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error uploading boundaries: {str(e)}")
 
 
 @router.post("/update-geojson-realistic")
