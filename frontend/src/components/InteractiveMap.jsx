@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Tooltip, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // Component to fit map bounds to markers
@@ -50,11 +50,6 @@ export default function InteractiveMap({ data }) {
     return colors[zone] || '#95a5a6';
   };
 
-  const getMarkerRadius = (score) => {
-    // Scale radius based on score (5-15 pixels)
-    return Math.max(5, Math.min(15, score / 10 + 5));
-  };
-
   const getZoneLabel = (zone) => {
     const labels = {
       green: 'Зелёная зона',
@@ -64,8 +59,32 @@ export default function InteractiveMap({ data }) {
     return labels[zone] || 'Нет данных';
   };
 
+  // Generate approximate boundary polygon around center point
+  // This creates a rectangle - можно заменить на реальные границы из GeoJSON
+  const generateBoundary = (lat, lon, size = 0.15) => {
+    return [
+      [lat + size, lon - size],
+      [lat + size, lon + size],
+      [lat - size, lon + size],
+      [lat - size, lon - size],
+    ];
+  };
+
   return (
-    <div className="h-96 rounded-lg overflow-hidden border border-gray-200">
+    <div className="rounded-lg overflow-hidden border border-gray-200" style={{ height: '600px' }}>
+      <style>{`
+        .municipality-label {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          font-weight: 600 !important;
+          color: #1f2937 !important;
+          text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white !important;
+        }
+        .municipality-label::before {
+          display: none !important;
+        }
+      `}</style>
       <MapContainer
         center={center}
         zoom={8}
@@ -79,39 +98,74 @@ export default function InteractiveMap({ data }) {
 
         <FitBounds bounds={bounds} />
 
-        {validData.map((mo) => (
-          <CircleMarker
-            key={mo.mo_id}
-            center={[mo.lat, mo.lon]}
-            radius={getMarkerRadius(mo.score_total)}
-            fillColor={getMarkerColor(mo.zone)}
-            color="#fff"
-            weight={2}
-            opacity={1}
-            fillOpacity={0.8}
-          >
-            <Popup>
-              <div className="p-2">
-                <h3 className="font-bold text-lg mb-2">{mo.mo_name}</h3>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="text-gray-600">Балл:</span>{' '}
-                    <span className="font-semibold">{mo.score_total.toFixed(1)}</span>
-                  </p>
-                  <p>
-                    <span className="text-gray-600">Зона:</span>{' '}
-                    <span
-                      className="font-semibold"
-                      style={{ color: getMarkerColor(mo.zone) }}
-                    >
-                      {getZoneLabel(mo.zone)}
-                    </span>
-                  </p>
+        {validData.map((mo) => {
+          const boundary = generateBoundary(mo.lat, mo.lon);
+          const fillColor = getMarkerColor(mo.zone);
+
+          return (
+            <Polygon
+              key={mo.mo_id}
+              positions={boundary}
+              pathOptions={{
+                fillColor: fillColor,
+                fillOpacity: 0.5,
+                color: fillColor,
+                weight: 2,
+                opacity: 0.8,
+              }}
+              eventHandlers={{
+                mouseover: (e) => {
+                  const layer = e.target;
+                  layer.setStyle({
+                    fillOpacity: 0.7,
+                    weight: 3,
+                  });
+                },
+                mouseout: (e) => {
+                  const layer = e.target;
+                  layer.setStyle({
+                    fillOpacity: 0.5,
+                    weight: 2,
+                  });
+                },
+              }}
+            >
+              {/* Permanent label with municipality name */}
+              <Tooltip
+                permanent
+                direction="center"
+                className="municipality-label"
+                opacity={1}
+              >
+                <div className="text-sm font-semibold text-gray-800">
+                  {mo.mo_name}
                 </div>
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
+              </Tooltip>
+
+              {/* Popup on click */}
+              <Popup>
+                <div className="p-2">
+                  <h3 className="font-bold text-lg mb-2">{mo.mo_name}</h3>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="text-gray-600">Балл:</span>{' '}
+                      <span className="font-semibold">{mo.score_total.toFixed(1)}</span>
+                    </p>
+                    <p>
+                      <span className="text-gray-600">Зона:</span>{' '}
+                      <span
+                        className="font-semibold"
+                        style={{ color: fillColor }}
+                      >
+                        {getZoneLabel(mo.zone)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </Popup>
+            </Polygon>
+          );
+        })}
       </MapContainer>
     </div>
   );
