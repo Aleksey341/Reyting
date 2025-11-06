@@ -42,7 +42,6 @@ class DimPeriod(Base):
     # Relationships
     indicators = relationship("FactIndicator", back_populates="period")
     penalties = relationship("FactPenalty", back_populates="period")
-    events = relationship("FactEvent", back_populates="period")
     summaries = relationship("FactSummary", back_populates="period")
 
 
@@ -179,7 +178,6 @@ class FactEvent(Base):
 
     # Relationships
     mo = relationship("DimMO", back_populates="events")
-    period = relationship("DimPeriod", back_populates="events", foreign_keys="")
 
 
 class FactSummary(Base):
