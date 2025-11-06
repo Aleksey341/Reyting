@@ -4,6 +4,7 @@ import './index.css';
 import MapPage from './pages/MapPage';
 import RatingPage from './pages/RatingPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import DataImportPage from './pages/DataImportPage';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 
@@ -35,6 +36,7 @@ function App() {
               <Route path="/map" element={<MapPage period={period} />} />
               <Route path="/rating" element={<RatingPage period={period} />} />
               <Route path="/analytics" element={<AnalyticsPage period={period} />} />
+              <Route path="/import" element={<DataImportPage />} />
             </Routes>
           </main>
         </div>

@@ -19,11 +19,16 @@ logger = logging.getLogger(__name__)
 @router.post("/csv")
 async def import_csv(
     file: UploadFile = File(...),
+    period_month: str = "2024-01",  # Формат: YYYY-MM
     db: Session = Depends(get_db),
 ):
     """
     Import CSV file with indicator data.
     Expected format: CSV with columns including 'Муниципалитет' and various indicators.
+
+    Parameters:
+    - file: CSV file to upload
+    - period_month: Period in YYYY-MM format (default: 2024-01)
     """
     try:
         # Read CSV file
@@ -31,6 +36,21 @@ async def import_csv(
         df = pd.read_csv(io.BytesIO(content), encoding='utf-8')
 
         logger.info(f"CSV uploaded: {len(df)} rows, {len(df.columns)} columns")
+        logger.info(f"Target period: {period_month}")
+
+        # Parse period_month
+        from datetime import datetime, timedelta
+        period_date = datetime.strptime(period_month, "%Y-%m")
+
+        # Calculate last day of month
+        if period_date.month == 12:
+            period_end = period_date.replace(day=31)
+        else:
+            next_month = period_date.replace(month=period_date.month + 1, day=1)
+            period_end = next_month - timedelta(days=1)
+
+        date_from = period_date.strftime("%Y-%m-%d")
+        date_to = period_end.strftime("%Y-%m-%d")
 
         # Create or get methodology v1
         methodology = db.query(DimMethodology).filter(
@@ -48,22 +68,24 @@ async def import_csv(
             db.refresh(methodology)
             logger.info(f"Created methodology v1 (ID: {methodology.version_id})")
 
-        # Create or get period 2024-01
+        # Create or get period
         period = db.query(DimPeriod).filter(
-            DimPeriod.date_from == "2024-01-01"
+            DimPeriod.date_from == date_from
         ).first()
 
         if not period:
             period = DimPeriod(
                 period_type="month",
-                date_from="2024-01-01",
-                date_to="2024-01-31",
+                date_from=date_from,
+                date_to=date_to,
                 edg_flag=False
             )
             db.add(period)
             db.commit()
             db.refresh(period)
-            logger.info(f"Created period 2024-01 (ID: {period.period_id})")
+            logger.info(f"Created period {period_month} (ID: {period.period_id})")
+        else:
+            logger.info(f"Using existing period {period_month} (ID: {period.period_id})")
 
         # Create municipalities
         municipalities = df[['Муниципалитет']].drop_duplicates()
