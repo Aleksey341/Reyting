@@ -263,6 +263,148 @@ async def update_municipality_coordinates(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error updating coordinates: {str(e)}")
 
 
+@router.get("/run-migration")
+async def run_migration_page(db: Session = Depends(get_db)):
+    """
+    Execute full migration: add geojson column and populate data.
+    Returns HTML page with results.
+    """
+    from fastapi.responses import HTMLResponse
+
+    results = []
+
+    # Step 1: Add geojson column
+    try:
+        result = db.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name='dim_mo' AND column_name='geojson'
+        """))
+
+        if result.fetchone() is None:
+            db.execute(text("ALTER TABLE dim_mo ADD COLUMN geojson JSON"))
+            db.commit()
+            results.append(("✅ Миграция", "Колонка geojson успешно добавлена"))
+        else:
+            results.append(("ℹ️ Миграция", "Колонка geojson уже существует"))
+    except Exception as e:
+        results.append(("❌ Миграция", f"Ошибка: {str(e)}"))
+        db.rollback()
+
+    # Step 2: Update geojson data
+    try:
+        import math
+        municipalities = db.query(DimMO).all()
+        updated = 0
+
+        for mo in municipalities:
+            if mo.lat and mo.lon:
+                size = 0.15
+                lat, lon = mo.lat, mo.lon
+
+                points = []
+                for i in range(6):
+                    angle = (i * 60) * (math.pi / 180)
+                    point_lon = lon + size * math.cos(angle)
+                    point_lat = lat + size * math.sin(angle)
+                    points.append([point_lon, point_lat])
+
+                points.append(points[0])
+
+                geojson_data = {
+                    "type": "Polygon",
+                    "coordinates": [points]
+                }
+
+                mo.geojson = geojson_data
+                updated += 1
+
+        db.commit()
+        results.append(("✅ GeoJSON", f"Обновлено границ: {updated} муниципалитетов"))
+    except Exception as e:
+        results.append(("❌ GeoJSON", f"Ошибка: {str(e)}"))
+        db.rollback()
+
+    # Generate HTML response
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Результаты миграции</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            h1 { color: #333; }
+            .result {
+                margin: 15px 0;
+                padding: 15px;
+                border-left: 4px solid #3b82f6;
+                background: #f0f9ff;
+            }
+            .result h3 {
+                margin: 0 0 10px 0;
+                color: #1e40af;
+            }
+            .result p {
+                margin: 0;
+                color: #475569;
+            }
+            .success { border-left-color: #10b981; background: #d1fae5; }
+            .success h3 { color: #065f46; }
+            .error { border-left-color: #ef4444; background: #fee2e2; }
+            .error h3 { color: #991b1b; }
+            .button {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 12px 24px;
+                background: #3b82f6;
+                color: white;
+                text-decoration: none;
+                border-radius: 4px;
+            }
+            .button:hover {
+                background: #2563eb;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔧 Результаты миграции базы данных</h1>
+    """
+
+    for title, message in results:
+        status_class = "success" if "✅" in title or "ℹ️" in title else "error"
+        html_content += f"""
+            <div class="result {status_class}">
+                <h3>{title}</h3>
+                <p>{message}</p>
+            </div>
+        """
+
+    html_content += """
+            <a href="/map" class="button">Открыть карту</a>
+            <a href="/api/docs" class="button" style="background: #6b7280;">API Docs</a>
+        </div>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html_content)
+
+
 @router.post("/migrate-add-geojson")
 async def migrate_add_geojson_column(db: Session = Depends(get_db)):
     """
