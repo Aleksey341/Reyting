@@ -207,3 +207,150 @@ async def get_import_stats(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching stats: {str(e)}")
+
+
+@router.post("/update-coordinates")
+async def update_municipality_coordinates(db: Session = Depends(get_db)):
+    """
+    Update coordinates for Lipetsk Oblast municipalities.
+    Adds lat/lon for map visualization.
+    """
+    try:
+        # Coordinates for Lipetsk Oblast municipalities (approximate centers)
+        coordinates = {
+            "Липецк": (52.6031, 39.5708),
+            "Елец": (52.6236, 38.5019),
+            "Воловский": (51.1528, 38.4500),
+            "Грязянский": (52.5000, 39.9500),
+            "Данковский": (53.2500, 39.1500),
+            "Добринский": (52.2000, 40.4000),
+            "Добровский": (52.3500, 39.2000),
+            "Долгоруковский": (52.3500, 38.3000),
+            "Елецкий": (52.6236, 38.5019),
+            "Задонский": (52.4000, 38.9000),
+            "Измалковский": (52.5000, 38.8000),
+            "Краснинский": (53.0000, 39.5000),
+            "Лебедянский": (53.0200, 39.1300),
+            "Лев-Толстовский": (52.1000, 39.5000),
+            "Липецкий": (52.6031, 39.5708),
+            "Становлянский": (53.0000, 38.5000),
+            "Тербунский": (52.1500, 38.2500),
+            "Усманский": (52.0500, 39.7400),
+            "Хлевенский": (52.4500, 38.1000),
+            "Чаплыгинский": (53.2500, 39.9500),
+        }
+
+        updated = 0
+        for mo_name, (lat, lon) in coordinates.items():
+            mo = db.query(DimMO).filter(DimMO.mo_name == mo_name).first()
+            if mo:
+                mo.lat = lat
+                mo.lon = lon
+                updated += 1
+
+        db.commit()
+        logger.info(f"Updated coordinates for {updated} municipalities")
+
+        return {
+            "status": "success",
+            "message": f"Updated coordinates for {updated} municipalities",
+            "updated": updated
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating coordinates: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating coordinates: {str(e)}")
+
+
+@router.post("/calculate-scores")
+async def calculate_summary_scores(db: Session = Depends(get_db)):
+    """
+    Calculate summary scores for all municipalities.
+    Creates records in fact_summary table based on indicator values.
+    """
+    try:
+        from models import FactSummary
+
+        # Get all municipalities
+        municipalities = db.query(DimMO).all()
+
+        # Get period and methodology
+        period = db.query(DimPeriod).filter(DimPeriod.date_from == "2024-01-01").first()
+        methodology = db.query(DimMethodology).filter(DimMethodology.version == "v1").first()
+
+        if not period or not methodology:
+            raise HTTPException(status_code=404, detail="Period or methodology not found")
+
+        created = 0
+        updated = 0
+
+        for mo in municipalities:
+            # Get all indicator values for this MO
+            indicator_values = db.query(FactIndicator).filter(
+                FactIndicator.mo_id == mo.mo_id,
+                FactIndicator.period_id == period.period_id,
+                FactIndicator.version_id == methodology.version_id
+            ).all()
+
+            if not indicator_values:
+                continue
+
+            # Calculate simple average score (можно сделать более сложную логику)
+            total_values = sum([v.value_raw for v in indicator_values if v.value_raw])
+            count_values = len([v for v in indicator_values if v.value_raw])
+
+            if count_values > 0:
+                avg_score = total_values / count_values
+                # Normalize to 0-100 scale
+                score_total = min(100, max(0, avg_score))
+
+                # Determine zone based on score
+                if score_total >= 70:
+                    zone = "green"
+                elif score_total >= 40:
+                    zone = "yellow"
+                else:
+                    zone = "red"
+            else:
+                score_total = 0
+                zone = "red"
+
+            # Check if summary exists
+            existing = db.query(FactSummary).filter(
+                FactSummary.mo_id == mo.mo_id,
+                FactSummary.period_id == period.period_id,
+                FactSummary.version_id == methodology.version_id
+            ).first()
+
+            if existing:
+                existing.score_total = score_total
+                existing.score_public = score_total
+                existing.zone = zone
+                updated += 1
+            else:
+                summary = FactSummary(
+                    mo_id=mo.mo_id,
+                    period_id=period.period_id,
+                    version_id=methodology.version_id,
+                    score_public=score_total,
+                    score_total=score_total,
+                    zone=zone
+                )
+                db.add(summary)
+                created += 1
+
+        db.commit()
+        logger.info(f"Created {created} summaries, updated {updated}")
+
+        return {
+            "status": "success",
+            "message": f"Calculated scores for municipalities",
+            "created": created,
+            "updated": updated
+        }
+
+    except Exception as e:
+        logger.error(f"Error calculating scores: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error calculating scores: {str(e)}")
