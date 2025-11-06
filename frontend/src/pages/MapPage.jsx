@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { mapService } from '../services/api';
+import InteractiveMap from '../components/InteractiveMap';
 
 export default function MapPage({ period }) {
   const [mapData, setMapData] = useState([]);
@@ -90,6 +91,14 @@ export default function MapPage({ period }) {
           ))}
         </div>
 
+        {/* Interactive Map */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">Интерактивная карта</h3>
+          <InteractiveMap data={mapData} />
+        </div>
+
+        {/* Table */}
+        <h3 className="text-lg font-semibold mb-3">Список муниципалитетов</h3>
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
