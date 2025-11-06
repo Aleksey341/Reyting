@@ -263,6 +263,41 @@ async def update_municipality_coordinates(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error updating coordinates: {str(e)}")
 
 
+@router.post("/migrate-add-geojson")
+async def migrate_add_geojson_column(db: Session = Depends(get_db)):
+    """
+    Add geojson column to dim_mo table if it doesn't exist.
+    This is a one-time migration.
+    """
+    try:
+        # Check if column exists
+        result = db.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name='dim_mo' AND column_name='geojson'
+        """))
+
+        if result.fetchone() is None:
+            # Add column
+            db.execute(text("ALTER TABLE dim_mo ADD COLUMN geojson JSON"))
+            db.commit()
+            logger.info("Added geojson column to dim_mo table")
+            return {
+                "status": "success",
+                "message": "geojson column added to dim_mo table"
+            }
+        else:
+            return {
+                "status": "success",
+                "message": "geojson column already exists"
+            }
+
+    except Exception as e:
+        logger.error(f"Error adding geojson column: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error adding geojson column: {str(e)}")
+
+
 @router.post("/update-geojson")
 async def update_municipality_geojson(db: Session = Depends(get_db)):
     """
