@@ -291,7 +291,7 @@ async def run_migration_page(db: Session = Depends(get_db)):
         results.append(("❌ Миграция", f"Ошибка: {str(e)}"))
         db.rollback()
 
-    # Step 2: Update geojson data
+    # Step 2: Update geojson data with realistic boundaries
     try:
         import math
         municipalities = db.query(DimMO).all()
@@ -299,28 +299,49 @@ async def run_migration_page(db: Session = Depends(get_db)):
 
         for mo in municipalities:
             if mo.lat and mo.lon:
-                size = 0.15
                 lat, lon = mo.lat, mo.lon
 
-                points = []
-                for i in range(6):
-                    angle = (i * 60) * (math.pi / 180)
-                    point_lon = lon + size * math.cos(angle)
-                    point_lat = lat + size * math.sin(angle)
-                    points.append([point_lon, point_lat])
+                # Определяем размер (города меньше, районы больше)
+                if mo.mo_name in ["Липецк", "Елец"]:
+                    size = 0.12
+                else:
+                    size = 0.20
 
-                points.append(points[0])
+                # Создаем эллиптический полигон с волнистыми краями
+                points_count = 48
+                coordinates = []
+
+                for i in range(points_count):
+                    angle = (i * 360 / points_count) * (math.pi / 180)
+
+                    # Эллиптическая форма
+                    a = size * 1.5
+                    b = size
+
+                    # Волнистость
+                    wave = 1.0 + 0.15 * math.sin(5 * angle) + 0.1 * math.cos(7 * angle)
+
+                    r = (a * b) / math.sqrt((b * math.cos(angle))**2 + (a * math.sin(angle))**2)
+                    r *= wave
+
+                    point_lat = lat + r * math.sin(angle)
+                    point_lon = lon + r * math.cos(angle) / math.cos(lat * math.pi / 180)
+
+                    coordinates.append([point_lon, point_lat])
+
+                # Замыкаем полигон
+                coordinates.append(coordinates[0])
 
                 geojson_data = {
                     "type": "Polygon",
-                    "coordinates": [points]
+                    "coordinates": [coordinates]
                 }
 
                 mo.geojson = geojson_data
                 updated += 1
 
         db.commit()
-        results.append(("✅ GeoJSON", f"Обновлено границ: {updated} муниципалитетов"))
+        results.append(("✅ GeoJSON", f"Обновлено границ: {updated} (эллиптические с волнистыми краями)"))
     except Exception as e:
         results.append(("❌ GeoJSON", f"Ошибка: {str(e)}"))
         db.rollback()
@@ -438,6 +459,77 @@ async def migrate_add_geojson_column(db: Session = Depends(get_db)):
         logger.error(f"Error adding geojson column: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error adding geojson column: {str(e)}")
+
+
+@router.post("/update-geojson-realistic")
+async def update_municipality_geojson_realistic(db: Session = Depends(get_db)):
+    """
+    Update GeoJSON boundaries with realistic elliptical shapes.
+    Creates more natural-looking boundaries based on municipality centers.
+    """
+    import math
+
+    try:
+        municipalities = db.query(DimMO).all()
+        updated = 0
+
+        for mo in municipalities:
+            if mo.lat and mo.lon:
+                lat, lon = mo.lat, mo.lon
+
+                # Определяем размер на основе названия (города меньше, районы больше)
+                if mo.mo_name in ["Липецк", "Елец"]:
+                    size = 0.12
+                else:
+                    size = 0.20
+
+                # Создаем эллиптический полигон с волнистыми краями
+                points = 48
+                coordinates = []
+
+                for i in range(points):
+                    angle = (i * 360 / points) * (math.pi / 180)
+
+                    # Эллиптическая форма
+                    a = size * 1.5  # Большая полуось
+                    b = size  # Малая полуось
+
+                    # Добавляем волнистость
+                    wave = 1.0 + 0.15 * math.sin(5 * angle) + 0.1 * math.cos(7 * angle)
+
+                    r = (a * b) / math.sqrt((b * math.cos(angle))**2 + (a * math.sin(angle))**2)
+                    r *= wave
+
+                    point_lat = lat + r * math.sin(angle)
+                    point_lon = lon + r * math.cos(angle) / math.cos(lat * math.pi / 180)
+
+                    coordinates.append([point_lon, point_lat])
+
+                # Замыкаем полигон
+                coordinates.append(coordinates[0])
+
+                geojson_data = {
+                    "type": "Polygon",
+                    "coordinates": [coordinates]
+                }
+
+                mo.geojson = geojson_data
+                updated += 1
+
+        db.commit()
+        logger.info(f"Updated realistic GeoJSON for {updated} municipalities")
+
+        return {
+            "status": "success",
+            "message": f"Updated realistic boundaries for {updated} municipalities",
+            "updated": updated,
+            "note": "Using elliptical shapes with wavy edges for natural appearance"
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating realistic GeoJSON: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating realistic GeoJSON: {str(e)}")
 
 
 @router.post("/update-geojson")
