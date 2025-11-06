@@ -15,6 +15,7 @@ from routes import (
     indicator_routes,
     methodology_routes,
     upload_routes,
+    data_import_routes,
 )
 
 # Setup logging with detailed format
@@ -131,6 +132,7 @@ app.include_router(rating_routes.router, prefix="/api/rating", tags=["rating"])
 app.include_router(indicator_routes.router, prefix="/api/indicators", tags=["indicators"])
 app.include_router(methodology_routes.router, prefix="/api/methodology", tags=["methodology"])
 app.include_router(upload_routes.router, prefix="/api/upload", tags=["upload"])
+app.include_router(data_import_routes.router, prefix="/api/import", tags=["data-import"])
 
 
 # Exception handlers
