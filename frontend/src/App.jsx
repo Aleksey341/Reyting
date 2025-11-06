@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 
 function App() {
   const [period, setPeriod] = useState('2024-01');
+  const [periodType, setPeriodType] = useState('month'); // 'month', 'halfyear', 'year'
   const [showSidebar, setShowSidebar] = useState(true);
 
   return (
@@ -17,6 +18,8 @@ function App() {
         <Header
           period={period}
           setPeriod={setPeriod}
+          periodType={periodType}
+          setPeriodType={setPeriodType}
           onMenuToggle={() => setShowSidebar(!showSidebar)}
         />
 

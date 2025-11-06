@@ -92,46 +92,7 @@ export default function MapPage({ period }) {
         </div>
 
         {/* Interactive Map */}
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-3">Интерактивная карта</h3>
-          <InteractiveMap data={mapData} />
-        </div>
-
-        {/* Table */}
-        <h3 className="text-lg font-semibold mb-3">Список муниципалитетов</h3>
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">МО</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Зона</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-700">Балл</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mapData.map((mo) => (
-                <tr
-                  key={mo.mo_id}
-                  className="border-b hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedMO(mo)}
-                >
-                  <td className="px-4 py-3 text-gray-900">{mo.mo_name}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="px-2 py-1 rounded text-white text-xs font-semibold"
-                      style={{ backgroundColor: getZoneColor(mo.zone) }}
-                    >
-                      {getZoneLabel(mo.zone)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                    {mo.score_total.toFixed(1)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <InteractiveMap data={mapData} />
       </div>
 
       {selectedMO && (
