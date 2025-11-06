@@ -263,6 +263,61 @@ async def update_municipality_coordinates(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error updating coordinates: {str(e)}")
 
 
+@router.post("/update-geojson")
+async def update_municipality_geojson(db: Session = Depends(get_db)):
+    """
+    Update GeoJSON boundaries for Lipetsk Oblast municipalities.
+    For now, this generates simplified polygon boundaries based on coordinates.
+    In production, this should be replaced with real GeoJSON data from OpenStreetMap or similar.
+    """
+    try:
+        municipalities = db.query(DimMO).all()
+        updated = 0
+
+        for mo in municipalities:
+            if mo.lat and mo.lon:
+                # Generate a more realistic polygon (hexagon instead of rectangle)
+                # This is still simplified - real boundaries should come from OSM
+                size = 0.15
+                lat, lon = mo.lat, mo.lon
+
+                # Create a hexagon-like shape
+                import math
+                points = []
+                for i in range(6):
+                    angle = (i * 60) * (math.pi / 180)
+                    point_lon = lon + size * math.cos(angle)
+                    point_lat = lat + size * math.sin(angle)
+                    points.append([point_lon, point_lat])
+
+                # Close the polygon
+                points.append(points[0])
+
+                # GeoJSON Polygon format
+                geojson_data = {
+                    "type": "Polygon",
+                    "coordinates": [points]
+                }
+
+                mo.geojson = geojson_data
+                updated += 1
+
+        db.commit()
+        logger.info(f"Updated GeoJSON for {updated} municipalities")
+
+        return {
+            "status": "success",
+            "message": f"Updated GeoJSON for {updated} municipalities",
+            "updated": updated,
+            "note": "Using generated hexagon boundaries. Replace with real OSM data for production."
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating GeoJSON: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating GeoJSON: {str(e)}")
+
+
 @router.post("/calculate-scores")
 async def calculate_summary_scores(db: Session = Depends(get_db)):
     """

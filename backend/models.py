@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, Date, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, CheckConstraint
+    Column, Integer, String, Float, Date, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, CheckConstraint, JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -16,6 +16,7 @@ class DimMO(Base):
     lat = Column(Float)
     lon = Column(Float)
     geojson_id = Column(String(50))
+    geojson = Column(JSON)  # GeoJSON polygon coordinates for map boundaries
     population = Column(Integer)
     area_km2 = Column(Float)
     type = Column(String(50))

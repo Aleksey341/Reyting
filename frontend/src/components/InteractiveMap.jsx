@@ -59,8 +59,7 @@ export default function InteractiveMap({ data }) {
     return labels[zone] || 'Нет данных';
   };
 
-  // Generate approximate boundary polygon around center point
-  // This creates a rectangle - можно заменить на реальные границы из GeoJSON
+  // Generate approximate boundary polygon around center point (fallback)
   const generateBoundary = (lat, lon, size = 0.15) => {
     return [
       [lat + size, lon - size],
@@ -68,6 +67,23 @@ export default function InteractiveMap({ data }) {
       [lat - size, lon + size],
       [lat - size, lon - size],
     ];
+  };
+
+  // Get boundary coordinates from geojson or generate fallback
+  const getBoundary = (mo) => {
+    if (mo.geojson && mo.geojson.coordinates) {
+      // GeoJSON can be Polygon or MultiPolygon
+      // Polygon: coordinates[0] is array of [lon, lat] pairs
+      // MultiPolygon: coordinates[0][0] is array of [lon, lat] pairs
+      const coords = mo.geojson.type === 'MultiPolygon'
+        ? mo.geojson.coordinates[0][0]
+        : mo.geojson.coordinates[0];
+
+      // Convert from [lon, lat] to [lat, lon] for Leaflet
+      return coords.map(coord => [coord[1], coord[0]]);
+    }
+    // Fallback to generated rectangle
+    return generateBoundary(mo.lat, mo.lon);
   };
 
   return (
@@ -99,7 +115,7 @@ export default function InteractiveMap({ data }) {
         <FitBounds bounds={bounds} />
 
         {validData.map((mo) => {
-          const boundary = generateBoundary(mo.lat, mo.lon);
+          const boundary = getBoundary(mo);
           const fillColor = getMarkerColor(mo.zone);
 
           return (
