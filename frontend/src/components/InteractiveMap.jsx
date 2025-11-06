@@ -15,7 +15,7 @@ function FitBounds({ bounds }) {
   return null;
 }
 
-export default function InteractiveMap({ data }) {
+export default function InteractiveMap({ data, onMunicipalityClick }) {
   if (!data || data.length === 0) {
     return (
       <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -143,6 +143,11 @@ export default function InteractiveMap({ data }) {
                     fillOpacity: 0.5,
                     weight: 2,
                   });
+                },
+                click: () => {
+                  if (onMunicipalityClick) {
+                    onMunicipalityClick(mo);
+                  }
                 },
               }}
             >

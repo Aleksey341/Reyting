@@ -92,7 +92,7 @@ export default function MapPage({ period }) {
         </div>
 
         {/* Interactive Map */}
-        <InteractiveMap data={mapData} />
+        <InteractiveMap data={mapData} onMunicipalityClick={setSelectedMO} />
       </div>
 
       {selectedMO && (
