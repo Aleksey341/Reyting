@@ -17,7 +17,7 @@ export default function Header({ period, setPeriod, periodEnd, setPeriodEnd, per
               </svg>
             </button>
             <h1 className="text-2xl font-bold text-gray-900">
-              Дашборд Липецкой области
+              Рейтинг Глав МО Липецкой области
             </h1>
           </div>
 
