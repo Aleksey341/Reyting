@@ -16,6 +16,7 @@ from routes import (
     methodology_routes,
     upload_routes,
     data_import_routes,
+    data_cleanup_routes,
 )
 
 # Setup logging with detailed format
@@ -133,6 +134,7 @@ app.include_router(indicator_routes.router, prefix="/api/indicators", tags=["ind
 app.include_router(methodology_routes.router, prefix="/api/methodology", tags=["methodology"])
 app.include_router(upload_routes.router, prefix="/api/upload", tags=["upload"])
 app.include_router(data_import_routes.router, prefix="/api/import", tags=["data-import"])
+app.include_router(data_cleanup_routes.router, prefix="/api/cleanup", tags=["data-cleanup"])
 
 
 # Exception handlers
