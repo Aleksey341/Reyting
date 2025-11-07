@@ -192,16 +192,26 @@ async def import_csv(
         db.commit()
         logger.info(f"Loaded {values_loaded} indicator values")
 
+        # Автоматически пересчитать баллы для загруженного периода
+        logger.info(f"Auto-calculating scores for period {period.period_id}...")
+        try:
+            score_result = await calculate_summary_scores(period_id=period.period_id, db=db)
+            logger.info(f"Scores calculated: {score_result}")
+        except Exception as e:
+            logger.error(f"Error calculating scores: {e}")
+            # Не падаем, если пересчет не удался - данные уже загружены
+
         return {
             "status": "success",
-            "message": "CSV imported successfully",
+            "message": "CSV imported successfully and scores calculated",
             "statistics": {
                 "rows": len(df),
                 "columns": len(df.columns),
                 "municipalities_created": mo_created,
                 "indicators_created": ind_created,
                 "values_loaded": values_loaded
-            }
+            },
+            "scores_calculated": True
         }
 
     except Exception as e:
@@ -736,10 +746,16 @@ async def update_municipality_geojson(db: Session = Depends(get_db)):
 
 
 @router.post("/calculate-scores")
-async def calculate_summary_scores(db: Session = Depends(get_db)):
+async def calculate_summary_scores(
+    period_id: int = None,
+    db: Session = Depends(get_db)
+):
     """
     Calculate summary scores for all municipalities.
     Creates records in fact_summary table based on indicator values.
+
+    Parameters:
+    - period_id: Optional. If not provided, calculates for all periods.
     """
     try:
         from models import FactSummary
@@ -747,79 +763,96 @@ async def calculate_summary_scores(db: Session = Depends(get_db)):
         # Get all municipalities
         municipalities = db.query(DimMO).all()
 
-        # Get period and methodology
-        period = db.query(DimPeriod).filter(DimPeriod.date_from == "2024-01-01").first()
+        # Get periods
+        if period_id:
+            periods = [db.query(DimPeriod).filter(DimPeriod.period_id == period_id).first()]
+            if not periods[0]:
+                raise HTTPException(status_code=404, detail=f"Period {period_id} not found")
+        else:
+            # Calculate for all periods
+            periods = db.query(DimPeriod).all()
+
         methodology = db.query(DimMethodology).filter(DimMethodology.version == "v1").first()
 
-        if not period or not methodology:
+        if not periods or not methodology:
             raise HTTPException(status_code=404, detail="Period or methodology not found")
 
-        created = 0
-        updated = 0
+        total_created = 0
+        total_updated = 0
 
-        for mo in municipalities:
-            # Get all indicator values for this MO
-            indicator_values = db.query(FactIndicator).filter(
-                FactIndicator.mo_id == mo.mo_id,
-                FactIndicator.period_id == period.period_id,
-                FactIndicator.version_id == methodology.version_id
-            ).all()
+        # Process each period
+        for period in periods:
+            created = 0
+            updated = 0
 
-            if not indicator_values:
-                continue
+            for mo in municipalities:
+                # Get all indicator values for this MO and period
+                indicator_values = db.query(FactIndicator).filter(
+                    FactIndicator.mo_id == mo.mo_id,
+                    FactIndicator.period_id == period.period_id,
+                    FactIndicator.version_id == methodology.version_id
+                ).all()
 
-            # Calculate simple average score (можно сделать более сложную логику)
-            total_values = sum([v.value_raw for v in indicator_values if v.value_raw])
-            count_values = len([v for v in indicator_values if v.value_raw])
+                if not indicator_values:
+                    continue
 
-            if count_values > 0:
-                avg_score = total_values / count_values
-                # Normalize to 0-100 scale
-                score_total = min(100, max(0, avg_score))
+                # Calculate simple average score (можно сделать более сложную логику)
+                total_values = sum([v.value_raw for v in indicator_values if v.value_raw])
+                count_values = len([v for v in indicator_values if v.value_raw])
 
-                # Determine zone based on score
-                if score_total >= 70:
-                    zone = "green"
-                elif score_total >= 40:
-                    zone = "yellow"
+                if count_values > 0:
+                    avg_score = total_values / count_values
+                    # Normalize to 0-100 scale
+                    score_total = min(100, max(0, avg_score))
+
+                    # Determine zone based on score
+                    if score_total >= 70:
+                        zone = "green"
+                    elif score_total >= 40:
+                        zone = "yellow"
+                    else:
+                        zone = "red"
                 else:
+                    score_total = 0
                     zone = "red"
-            else:
-                score_total = 0
-                zone = "red"
 
-            # Check if summary exists
-            existing = db.query(FactSummary).filter(
-                FactSummary.mo_id == mo.mo_id,
-                FactSummary.period_id == period.period_id,
-                FactSummary.version_id == methodology.version_id
-            ).first()
+                # Check if summary exists
+                existing = db.query(FactSummary).filter(
+                    FactSummary.mo_id == mo.mo_id,
+                    FactSummary.period_id == period.period_id,
+                    FactSummary.version_id == methodology.version_id
+                ).first()
 
-            if existing:
-                existing.score_total = score_total
-                existing.score_public = score_total
-                existing.zone = zone
-                updated += 1
-            else:
-                summary = FactSummary(
-                    mo_id=mo.mo_id,
-                    period_id=period.period_id,
-                    version_id=methodology.version_id,
-                    score_public=score_total,
-                    score_total=score_total,
-                    zone=zone
-                )
-                db.add(summary)
-                created += 1
+                if existing:
+                    existing.score_total = score_total
+                    existing.score_public = score_total
+                    existing.zone = zone
+                    updated += 1
+                else:
+                    summary = FactSummary(
+                        mo_id=mo.mo_id,
+                        period_id=period.period_id,
+                        version_id=methodology.version_id,
+                        score_public=score_total,
+                        score_total=score_total,
+                        zone=zone
+                    )
+                    db.add(summary)
+                    created += 1
+
+            total_created += created
+            total_updated += updated
+            logger.info(f"Period {period.period_id}: Created {created}, updated {updated}")
 
         db.commit()
-        logger.info(f"Created {created} summaries, updated {updated}")
+        logger.info(f"Total: Created {total_created} summaries, updated {total_updated}")
 
         return {
             "status": "success",
-            "message": f"Calculated scores for municipalities",
-            "created": created,
-            "updated": updated
+            "message": f"Calculated scores for {len(periods)} period(s)",
+            "periods_processed": len(periods),
+            "created": total_created,
+            "updated": total_updated
         }
 
     except Exception as e:
