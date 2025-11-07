@@ -491,40 +491,114 @@ async def upload_real_boundaries(
 ):
     """
     Upload real GeoJSON boundaries from file.
-    Expects JSON file with structure: {"МО_name": {"type": "Polygon", "coordinates": [...]}}
+    Expects standard GeoJSON FeatureCollection with properties.name for each municipality.
+
+    Format:
+    {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {"name": "Липецк", ...},
+          "geometry": {"type": "Polygon", "coordinates": [...]}
+        },
+        ...
+      ]
+    }
     """
     try:
         # Read uploaded file
         content = await file.read()
-        boundaries = json.loads(content.decode('utf-8'))
+        data = json.loads(content.decode('utf-8'))
 
         logger.info(f"Uploading real boundaries from file: {file.filename}")
-        logger.info(f"Found {len(boundaries)} municipalities in file")
 
-        updated = 0
-        not_found = []
+        # Support both FeatureCollection and old format
+        if data.get("type") == "FeatureCollection":
+            features = data.get("features", [])
+            logger.info(f"Found FeatureCollection with {len(features)} features")
 
-        for mo_name, geojson_data in boundaries.items():
-            # Find municipality in database
-            mo = db.query(DimMO).filter(DimMO.mo_name == mo_name).first()
+            updated = 0
+            not_found = []
+            errors = []
 
-            if mo:
-                mo.geojson = geojson_data
-                updated += 1
-                logger.info(f"Updated {mo_name}")
-            else:
-                not_found.append(mo_name)
-                logger.warning(f"Municipality not found in DB: {mo_name}")
+            for feature in features:
+                if feature.get("type") != "Feature":
+                    errors.append(f"Invalid feature type: {feature.get('type')}")
+                    continue
 
-        db.commit()
+                properties = feature.get("properties", {})
+                geometry = feature.get("geometry")
 
-        return {
-            "status": "success",
-            "message": f"Uploaded real boundaries for {updated} municipalities",
-            "updated": updated,
-            "not_found": not_found,
-            "note": "Real boundaries from OpenStreetMap"
-        }
+                # Get municipality name from properties
+                mo_name = properties.get("name") or properties.get("NAME") or properties.get("mo_name")
+
+                if not mo_name:
+                    errors.append("Feature missing 'name' property")
+                    continue
+
+                mo_name = mo_name.strip()
+
+                if not geometry:
+                    errors.append(f"Feature {mo_name} missing geometry")
+                    continue
+
+                # Find municipality in database (case-insensitive)
+                mo = db.query(DimMO).filter(
+                    DimMO.mo_name.ilike(mo_name)
+                ).first()
+
+                if mo:
+                    # Store as GeoJSON Feature
+                    mo.geojson = {
+                        "type": "Feature",
+                        "properties": {"name": mo.mo_name},  # Use DB name for consistency
+                        "geometry": geometry
+                    }
+                    updated += 1
+                    logger.info(f"Updated {mo.mo_name}")
+                else:
+                    not_found.append(mo_name)
+                    logger.warning(f"Municipality not found in DB: {mo_name}")
+
+            db.commit()
+
+            return {
+                "status": "success",
+                "message": f"Uploaded real boundaries for {updated} municipalities",
+                "updated": updated,
+                "not_found": not_found,
+                "errors": errors,
+                "note": "Real boundaries from GeoJSON FeatureCollection"
+            }
+
+        else:
+            # Old format: {"МО_name": {"type": "Polygon", "coordinates": [...]}}
+            logger.info(f"Found {len(data)} municipalities in old format")
+
+            updated = 0
+            not_found = []
+
+            for mo_name, geojson_data in data.items():
+                mo = db.query(DimMO).filter(DimMO.mo_name == mo_name).first()
+
+                if mo:
+                    mo.geojson = geojson_data
+                    updated += 1
+                    logger.info(f"Updated {mo_name}")
+                else:
+                    not_found.append(mo_name)
+                    logger.warning(f"Municipality not found in DB: {mo_name}")
+
+            db.commit()
+
+            return {
+                "status": "success",
+                "message": f"Uploaded real boundaries for {updated} municipalities",
+                "updated": updated,
+                "not_found": not_found,
+                "note": "Real boundaries from legacy format"
+            }
 
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON: {str(e)}")
