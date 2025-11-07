@@ -63,11 +63,11 @@ export default function MapPage({ period }) {
     );
   }
 
-  // Group by zones
+  // Group by zones (exclude municipalities with no data)
   const zones = {
-    green: mapData.filter(d => d.zone === 'green'),
-    yellow: mapData.filter(d => d.zone === 'yellow'),
-    red: mapData.filter(d => d.zone === 'red'),
+    green: mapData.filter(d => d.zone === 'green' && d.score_total != null),
+    yellow: mapData.filter(d => d.zone === 'yellow' && d.score_total != null),
+    red: mapData.filter(d => d.zone === 'red' && d.score_total != null),
   };
 
   return (
@@ -110,7 +110,7 @@ export default function MapPage({ period }) {
             <div>
               <p className="text-sm text-gray-600">Итоговый балл</p>
               <p className="text-3xl font-bold text-gray-900">
-                {selectedMO.score_total.toFixed(1)}
+                {selectedMO.score_total != null ? selectedMO.score_total.toFixed(1) : 'Нет данных'}
               </p>
             </div>
             <div>

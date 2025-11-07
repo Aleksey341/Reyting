@@ -66,8 +66,8 @@ async def get_map_data(
                 "lat": float(lat) if lat else None,
                 "lon": float(lon) if lon else None,
                 "geojson": geojson,
-                "score_total": float(score) if score else 0,
-                "zone": zone or "red",
+                "score_total": float(score) if score else None,
+                "zone": zone if zone else None,
             })
 
         return {

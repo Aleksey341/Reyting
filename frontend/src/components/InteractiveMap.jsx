@@ -108,8 +108,19 @@ export default function InteractiveMap({ data, onMunicipalityClick }) {
 
   // Style function for GeoJSON
   const style = (feature) => {
-    const score = feature.properties.score || 0;
+    const score = feature.properties.score;
     const zone = feature.properties.zone;
+
+    // If no zone or score is null/undefined, use gray color with low opacity (no data)
+    if (!zone || score == null) {
+      return {
+        fillColor: '#e0e0e0',  // Light gray
+        weight: 2,
+        opacity: 0.5,
+        color: '#9e9e9e',      // Gray border
+        fillOpacity: 0.3,      // Very transparent
+      };
+    }
 
     return {
       fillColor: getZoneColor(zone),
@@ -124,13 +135,18 @@ export default function InteractiveMap({ data, onMunicipalityClick }) {
   const onEachFeature = (feature, layer) => {
     const { name, score, zone } = feature.properties;
 
+    // Check if data exists
+    const hasData = zone && score != null;
+    const displayScore = hasData ? score.toFixed(1) : 'Нет данных';
+    const displayZone = hasData ? `<span style="color: ${getZoneColor(zone)};">${getZoneLabel(zone)}</span>` : '<span style="color: #9e9e9e;">Нет данных</span>';
+
     // Popup content
     layer.bindPopup(`
       <div style="padding: 8px;">
         <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">${name}</h3>
         <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 4px 0;"><strong>Балл:</strong> ${score.toFixed(1)}</p>
-          <p style="margin: 4px 0;"><strong>Зона:</strong> <span style="color: ${getZoneColor(zone)};">${getZoneLabel(zone)}</span></p>
+          <p style="margin: 4px 0;"><strong>Балл:</strong> ${displayScore}</p>
+          <p style="margin: 4px 0;"><strong>Зона:</strong> ${displayZone}</p>
         </div>
       </div>
     `);
@@ -274,6 +290,13 @@ export default function InteractiveMap({ data, onMunicipalityClick }) {
               style={{ backgroundColor: getZoneColor('red') }}
             />
             <span className="text-sm text-gray-700">Красная зона (низкий балл)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              className="w-6 h-6 rounded border border-gray-300"
+              style={{ backgroundColor: '#e0e0e0', opacity: 0.5 }}
+            />
+            <span className="text-sm text-gray-500">Нет данных</span>
           </div>
         </div>
       </div>
