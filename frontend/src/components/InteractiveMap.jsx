@@ -265,41 +265,6 @@ export default function InteractiveMap({ data, onMunicipalityClick }) {
           />
         </MapContainer>
       </div>
-
-      {/* Legend */}
-      <div className="absolute bottom-6 right-6 bg-white rounded-lg shadow-lg p-4 z-10 max-w-xs">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Легенда</h4>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded border border-gray-300"
-              style={{ backgroundColor: getZoneColor('green') }}
-            />
-            <span className="text-sm text-gray-700">Зелёная зона (высокий балл)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded border border-gray-300"
-              style={{ backgroundColor: getZoneColor('yellow') }}
-            />
-            <span className="text-sm text-gray-700">Жёлтая зона (средний балл)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded border border-gray-300"
-              style={{ backgroundColor: getZoneColor('red') }}
-            />
-            <span className="text-sm text-gray-700">Красная зона (низкий балл)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded border border-gray-300"
-              style={{ backgroundColor: '#e0e0e0', opacity: 0.5 }}
-            />
-            <span className="text-sm text-gray-500">Нет данных</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
