@@ -8,6 +8,7 @@ export default function Sidebar() {
     { path: '/', label: 'Карта', icon: '🗺️' },
     { path: '/rating', label: 'Рейтинг', icon: '📊' },
     { path: '/analytics', label: 'Аналитика', icon: '📈' },
+    { path: '/import', label: 'Загрузка данных', icon: '📁' },
   ];
 
   return (

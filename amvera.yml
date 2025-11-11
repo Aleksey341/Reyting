@@ -58,6 +58,10 @@ run:
       value: "Dashboard API"
     - name: PYTHONUNBUFFERED
       value: "1"
+    - name: STATIC_DIR
+      value: "/app/static"
+    - name: ALLOWED_ORIGINS
+      value: "*"
 
   # Ресурсы контейнера
   resources:

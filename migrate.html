@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Миграция базы данных - Reyting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #3b82f6;
+            background: #f0f9ff;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 10px 10px 0;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        .info {
+            background: #e0e7ff;
+            color: #3730a3;
+            border: 1px solid #6366f1;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Миграция базы данных Reyting</h1>
+        <p>Эта страница выполнит необходимые обновления базы данных для добавления поддержки GeoJSON границ муниципалитетов.</p>
+
+        <div class="step">
+            <h3>Шаг 1: Добавить колонку geojson</h3>
+            <p>Добавляет новую колонку в таблицу dim_mo для хранения границ муниципалитетов</p>
+            <button id="btn-migrate" onclick="runMigration()">Выполнить миграцию</button>
+            <div id="result-migrate"></div>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 2: Заполнить GeoJSON данные</h3>
+            <p>Генерирует шестиугольные границы для всех муниципалитетов (временное решение)</p>
+            <button id="btn-geojson" onclick="updateGeoJSON()" disabled>Заполнить границы</button>
+            <div id="result-geojson"></div>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 3: Проверить карту</h3>
+            <p>После выполнения всех шагов откройте карту и обновите страницу</p>
+            <button id="btn-open-map" onclick="openMap()" disabled>Открыть карту</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://reyting-backend-alex1976.amvera.io/api';
+
+        function showResult(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.className = `result ${type}`;
+            el.innerHTML = message;
+        }
+
+        function showLoading(elementId) {
+            const el = document.getElementById(elementId);
+            el.className = 'result info';
+            el.innerHTML = 'Выполняется... <span class="loading"></span>';
+        }
+
+        async function runMigration() {
+            const btn = document.getElementById('btn-migrate');
+            btn.disabled = true;
+            showLoading('result-migrate');
+
+            try {
+                const response = await fetch(`${API_BASE}/import/migrate-add-geojson`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult('result-migrate', `✅ Успешно: ${data.message}`, 'success');
+                    document.getElementById('btn-geojson').disabled = false;
+                } else {
+                    showResult('result-migrate', `❌ Ошибка: ${data.detail}`, 'error');
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                showResult('result-migrate', `❌ Ошибка сети: ${error.message}`, 'error');
+                btn.disabled = false;
+            }
+        }
+
+        async function updateGeoJSON() {
+            const btn = document.getElementById('btn-geojson');
+            btn.disabled = true;
+            showLoading('result-geojson');
+
+            try {
+                const response = await fetch(`${API_BASE}/import/update-geojson`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult('result-geojson',
+                        `✅ Успешно: ${data.message}<br>Обновлено муниципалитетов: ${data.updated}<br>Примечание: ${data.note}`,
+                        'success'
+                    );
+                    document.getElementById('btn-open-map').disabled = false;
+                } else {
+                    showResult('result-geojson', `❌ Ошибка: ${data.detail}`, 'error');
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                showResult('result-geojson', `❌ Ошибка сети: ${error.message}`, 'error');
+                btn.disabled = false;
+            }
+        }
+
+        function openMap() {
+            window.open('https://reyting-alex1976.amvera.io/map', '_blank');
+        }
+    </script>
+</body>
+</html>

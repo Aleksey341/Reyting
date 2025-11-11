@@ -1,0 +1,12 @@
+[out:json][timeout:180];
+
+// Область поиска: Липецкая область (admin_level=4)
+area["boundary"="administrative"]["admin_level"="4"]["name:ru"="Липецкая область"]->.a;
+
+// Муниципальные районы/округа (admin_level=6)
+rel(area.a)["boundary"="administrative"]["admin_level"="6"];
+
+// ВЫДАЁМ ГЕОМЕТРИЮ!
+out tags geom;
+>;
+out skel qt;

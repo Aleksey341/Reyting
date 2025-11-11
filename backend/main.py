@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import logging
 import os
+from pathlib import Path
 from config import settings
 from database import engine, Base
 
@@ -13,6 +15,8 @@ from routes import (
     indicator_routes,
     methodology_routes,
     upload_routes,
+    data_import_routes,
+    data_cleanup_routes,
 )
 
 # Setup logging with detailed format
@@ -29,8 +33,12 @@ logger.info(f"ALLOWED_ORIGINS={os.getenv('ALLOWED_ORIGINS', '*')}")
 
 # Create tables
 logger.info("Creating database tables if not exist...")
-Base.metadata.create_all(bind=engine)
-logger.info("✓ Database tables ready")
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("✓ Database tables ready")
+except Exception as e:
+    logger.warning(f"⚠ Database connection failed: {e}")
+    logger.warning("⚠ App will start without database (API endpoints will not work)")
 
 # Create app with /api docs path
 app = FastAPI(
@@ -62,6 +70,24 @@ app.add_middleware(
 )
 
 
+# ============================================================================
+# Static Files Configuration (для единого развертывания frontend+backend)
+# ============================================================================
+STATIC_DIR = Path(os.getenv("STATIC_DIR", "/app/static"))
+
+# Mount static files if directory exists
+if STATIC_DIR.exists() and STATIC_DIR.is_dir():
+    logger.info(f"✓ Static files directory found: {STATIC_DIR}")
+    # Mount /assets for JS/CSS bundles
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="static-assets")
+    logger.info("✓ Serving frontend static files from /assets")
+    SERVE_FRONTEND = True
+else:
+    logger.warning(f"⚠ Static directory not found: {STATIC_DIR}")
+    logger.warning("⚠ Frontend will not be served (backend-only mode)")
+    SERVE_FRONTEND = False
+
+
 # Health check endpoint (root level for container healthchecks)
 @app.get("/health")
 async def health_check():
@@ -69,10 +95,15 @@ async def health_check():
     return {"status": "ok", "service": "reyting-api"}
 
 
-# Root endpoint (redirect to API docs)
+# Root endpoint (serve frontend or redirect to API docs)
 @app.get("/")
 async def root():
-    """Redirect root to API documentation"""
+    """Serve frontend index.html or redirect to API docs"""
+    if SERVE_FRONTEND:
+        index_file = STATIC_DIR / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+    # Fallback to API docs if no frontend
     return RedirectResponse(url="/api/docs")
 
 
@@ -102,6 +133,8 @@ app.include_router(rating_routes.router, prefix="/api/rating", tags=["rating"])
 app.include_router(indicator_routes.router, prefix="/api/indicators", tags=["indicators"])
 app.include_router(methodology_routes.router, prefix="/api/methodology", tags=["methodology"])
 app.include_router(upload_routes.router, prefix="/api/upload", tags=["upload"])
+app.include_router(data_import_routes.router, prefix="/api/import", tags=["data-import"])
+app.include_router(data_cleanup_routes.router, prefix="/api/cleanup", tags=["data-cleanup"])
 
 
 # Exception handlers
@@ -111,6 +144,30 @@ async def global_exception_handler(request, exc):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
+    )
+
+
+# ============================================================================
+# SPA Fallback Route (MUST BE LAST!)
+# ============================================================================
+# This catches all routes not matched by API endpoints and serves index.html
+# This enables React Router to handle client-side routing
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    """
+    Catch-all route for SPA (Single Page Application) routing.
+    Returns index.html for any route not matched by API endpoints.
+    This allows React Router to handle client-side navigation.
+    """
+    if SERVE_FRONTEND:
+        index_file = STATIC_DIR / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+
+    # If no frontend, return 404
+    return JSONResponse(
+        status_code=404,
+        content={"detail": f"Route /{full_path} not found"}
     )
 
 

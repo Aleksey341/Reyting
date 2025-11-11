@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { mapService } from '../services/api';
+import InteractiveMap from '../components/InteractiveMap';
 
 export default function MapPage({ period }) {
   const [mapData, setMapData] = useState([]);
@@ -62,11 +63,11 @@ export default function MapPage({ period }) {
     );
   }
 
-  // Group by zones
+  // Group by zones (exclude municipalities with no data)
   const zones = {
-    green: mapData.filter(d => d.zone === 'green'),
-    yellow: mapData.filter(d => d.zone === 'yellow'),
-    red: mapData.filter(d => d.zone === 'red'),
+    green: mapData.filter(d => d.zone === 'green' && d.score_total != null),
+    yellow: mapData.filter(d => d.zone === 'yellow' && d.score_total != null),
+    red: mapData.filter(d => d.zone === 'red' && d.score_total != null),
   };
 
   return (
@@ -74,39 +75,8 @@ export default function MapPage({ period }) {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-xl font-semibold mb-4">Карта МО Липецкой области</h2>
 
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">МО</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Зона</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-700">Балл</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mapData.map((mo) => (
-                <tr
-                  key={mo.mo_id}
-                  className="border-b hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedMO(mo)}
-                >
-                  <td className="px-4 py-3 text-gray-900">{mo.mo_name}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="px-2 py-1 rounded text-white text-xs font-semibold"
-                      style={{ backgroundColor: getZoneColor(mo.zone) }}
-                    >
-                      {getZoneLabel(mo.zone)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                    {mo.score_total.toFixed(1)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* Interactive Map */}
+        <InteractiveMap data={mapData} onMunicipalityClick={setSelectedMO} />
       </div>
 
       {selectedMO && (
@@ -124,7 +94,7 @@ export default function MapPage({ period }) {
             <div>
               <p className="text-sm text-gray-600">Итоговый балл</p>
               <p className="text-3xl font-bold text-gray-900">
-                {selectedMO.score_total.toFixed(1)}
+                {selectedMO.score_total != null ? selectedMO.score_total.toFixed(1) : 'Нет данных'}
               </p>
             </div>
             <div>

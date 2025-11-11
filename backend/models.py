@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, Date, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, CheckConstraint
+    Column, Integer, String, Float, Date, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, CheckConstraint, JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -16,6 +16,7 @@ class DimMO(Base):
     lat = Column(Float)
     lon = Column(Float)
     geojson_id = Column(String(50))
+    geojson = Column(JSON)  # GeoJSON polygon coordinates for map boundaries
     population = Column(Integer)
     area_km2 = Column(Float)
     type = Column(String(50))
@@ -42,7 +43,6 @@ class DimPeriod(Base):
     # Relationships
     indicators = relationship("FactIndicator", back_populates="period")
     penalties = relationship("FactPenalty", back_populates="period")
-    events = relationship("FactEvent", back_populates="period")
     summaries = relationship("FactSummary", back_populates="period")
 
 
@@ -179,7 +179,6 @@ class FactEvent(Base):
 
     # Relationships
     mo = relationship("DimMO", back_populates="events")
-    period = relationship("DimPeriod", back_populates="events", foreign_keys="")
 
 
 class FactSummary(Base):

@@ -28,6 +28,7 @@ async def get_map_data(
             DimMO.mo_name,
             DimMO.lat,
             DimMO.lon,
+            DimMO.geojson,
             FactSummary.score_total,
             FactSummary.zone,
         ).outerjoin(
@@ -58,14 +59,15 @@ async def get_map_data(
 
         # Format response
         features = []
-        for mo_id, mo_name, lat, lon, score, zone in results:
+        for mo_id, mo_name, lat, lon, geojson, score, zone in results:
             features.append({
                 "mo_id": mo_id,
                 "mo_name": mo_name,
                 "lat": float(lat) if lat else None,
                 "lon": float(lon) if lon else None,
-                "score_total": float(score) if score else 0,
-                "zone": zone or "red",
+                "geojson": geojson,
+                "score_total": float(score) if score else None,
+                "zone": zone if zone else None,
             })
 
         return {
