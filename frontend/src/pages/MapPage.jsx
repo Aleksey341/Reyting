@@ -74,22 +74,6 @@ export default function MapPage({ period }) {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-xl font-semibold mb-4">Карта МО Липецкой области</h2>
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {Object.entries(zones).map(([zone, mos]) => (
-            <div
-              key={zone}
-              className="p-4 rounded-lg"
-              style={{ backgroundColor: getZoneColor(zone) + '20', borderLeft: `4px solid ${getZoneColor(zone)}` }}
-            >
-              <div className="text-sm font-semibold" style={{ color: getZoneColor(zone) }}>
-                {getZoneLabel(zone)}
-              </div>
-              <div className="text-2xl font-bold text-gray-900">{mos.length}</div>
-              <div className="text-xs text-gray-600">МО</div>
-            </div>
-          ))}
-        </div>
-
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
