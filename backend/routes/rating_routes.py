@@ -128,11 +128,35 @@ async def get_rating(
         offset = (page - 1) * page_size
         results = query.offset(offset).limit(page_size).all()
 
-        # Format response
+        # Determine period_id for fetching indicators and penalties
+        period_id = None
+        if period:
+            try:
+                period_date = datetime.strptime(period, "%Y-%m").date()
+                period_obj = db.query(DimPeriod).filter(
+                    and_(
+                        DimPeriod.date_from <= period_date,
+                        DimPeriod.date_to >= period_date,
+                    )
+                ).first()
+                if period_obj:
+                    period_id = period_obj.period_id
+            except ValueError:
+                pass
+
+        # Format response with hierarchical block structure
         items = []
         for r in results:
-            items.append({
-                "mo_id": r[0],
+            mo_id = r[0]
+
+            # Fetch criteria blocks with their indicators for this MO
+            blocks = get_criteria_blocks_for_mo(db, mo_id, period_id, version)
+
+            # Fetch penalties for this MO
+            penalties = get_penalties_for_mo(db, mo_id, period_id, version)
+
+            item = {
+                "mo_id": mo_id,
                 "mo_name": r[1],
                 "leader_name": r[2] or "Не указано",
                 "score_public": float(r[3]) if r[3] else 0,
@@ -140,10 +164,11 @@ async def get_rating(
                 "score_penalties": float(r[5]) if r[5] else 0,
                 "score_total": float(r[6]) if r[6] else 0,
                 "zone": r[7],
-                "indicators": {},
-                "penalties": {},
                 "updated_at": r[8].isoformat() if r[8] else None,
-            })
+                "blocks": blocks,  # Hierarchical block structure
+                "penalties": penalties,  # Penalty information
+            }
+            items.append(item)
 
         return {
             "status": "success",
