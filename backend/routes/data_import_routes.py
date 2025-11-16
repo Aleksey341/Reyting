@@ -177,13 +177,15 @@ async def import_csv(
 
                 if existing:
                     existing.value_raw = value_raw
+                    existing.score = value_raw  # Также обновить score
                 else:
                     fact = FactIndicator(
                         mo_id=mo_id,
                         period_id=period.period_id,
                         ind_id=ind_id,
                         version_id=methodology.version_id,
-                        value_raw=value_raw
+                        value_raw=value_raw,
+                        score=value_raw  # ← ДОБАВИТЬ: заполнить score
                     )
                     db.add(fact)
 
