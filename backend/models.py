@@ -47,6 +47,20 @@ class DimPeriod(Base):
     summaries = relationship("FactSummary", back_populates="period")
 
 
+class DimCriteriaBlock(Base):
+    __tablename__ = "dim_criteria_block"
+
+    block_id = Column(Integer, primary_key=True)
+    block_name = Column(String(255), nullable=False, unique=True)
+    block_order = Column(Integer)
+    description = Column(Text)
+    is_visible = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationships
+    indicators = relationship("DimIndicator", back_populates="criteria_block")
+
+
 class DimIndicator(Base):
     __tablename__ = "dim_indicator"
 
@@ -54,6 +68,8 @@ class DimIndicator(Base):
     code = Column(String(50), nullable=False, unique=True)
     name = Column(String(255), nullable=False)
     block = Column(String(100))
+    block_id = Column(Integer, ForeignKey("dim_criteria_block.block_id"))
+    criteria_order = Column(Integer)
     description = Column(Text)
     unit = Column(String(50))
     is_public = Column(Boolean, default=True)
@@ -66,6 +82,7 @@ class DimIndicator(Base):
 
     # Relationships
     facts = relationship("FactIndicator", back_populates="indicator")
+    criteria_block = relationship("DimCriteriaBlock", back_populates="indicators")
 
 
 class DimPenalty(Base):
@@ -76,6 +93,7 @@ class DimPenalty(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     owner_org = Column(String(100))
+    block = Column(String(100))  # e.g., "Штрафные критерии"
     created_at = Column(DateTime, server_default=func.now())
 
     # Relationships
