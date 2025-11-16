@@ -40,9 +40,11 @@ async def get_rating(
                 text("SELECT leader_name FROM dim_mo LIMIT 1")
             )
             has_leader_name = True
-        except Exception:
+        except Exception as e:
+            # Rollback failed transaction
+            db.rollback()
             has_leader_name = False
-            logger.warning("leader_name column does not exist, proceeding without it")
+            logger.warning(f"leader_name column does not exist, proceeding without it: {str(e)}")
 
         # Build query based on column availability
         if has_leader_name:
@@ -175,8 +177,11 @@ async def compare_mos(
         try:
             db.execute(text("SELECT leader_name FROM dim_mo LIMIT 1"))
             has_leader_name = True
-        except Exception:
+        except Exception as e:
+            # Rollback failed transaction
+            db.rollback()
             has_leader_name = False
+            logger.warning(f"leader_name column does not exist in comparison endpoint: {str(e)}")
 
         if has_leader_name:
             query = db.query(
