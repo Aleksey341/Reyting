@@ -93,7 +93,7 @@ def apply_leader_name_column_migration():
 
 def apply_criteria_blocks_migration():
     """
-    Migration: Create dim_criteria_block table and populate with block structure
+    Migration: Create dim_criteria_block table and add block_id columns to dim_indicator
     """
     try:
         session = SessionLocal()
@@ -102,10 +102,10 @@ def apply_criteria_blocks_migration():
         inspector = inspect(engine)
         tables = [table.name for table in inspector.get_table_names()]
 
+        # Create dim_criteria_block table if not exists
         if 'dim_criteria_block' not in tables:
             logger.info("🔄 Running migration: Creating dim_criteria_block table...")
 
-            # Create table
             session.execute(text("""
                 CREATE TABLE IF NOT EXISTS dim_criteria_block (
                     block_id SERIAL PRIMARY KEY,
@@ -116,52 +116,60 @@ def apply_criteria_blocks_migration():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
-
-            # Add block_id to dim_indicator if not exists
-            columns = [col['name'] for col in inspector.get_columns('dim_indicator')]
-            if 'block_id' not in columns:
-                session.execute(text("""
-                    ALTER TABLE dim_indicator
-                    ADD COLUMN block_id INTEGER REFERENCES dim_criteria_block(block_id)
-                """))
-
-            if 'criteria_order' not in columns:
-                session.execute(text("""
-                    ALTER TABLE dim_indicator
-                    ADD COLUMN criteria_order INTEGER
-                """))
-
-            # Insert blocks
-            blocks = [
-                ('Политический менеджмент', 1, 'Критерии политического управления МО'),
-                ('Забота и внимание', 2, 'Критерии социальной политики и вовлеченности'),
-                ('Развитие кадрового и проектного потенциала МО', 3, 'Критерии развития кадров и проектов'),
-                ('Штрафные критерии', 4, 'Критерии с отрицательными баллами'),
-            ]
-
-            for block_name, block_order, description in blocks:
-                session.execute(text("""
-                    INSERT INTO dim_criteria_block (block_name, block_order, description, is_visible)
-                    VALUES (:name, :order, :desc, true)
-                    ON CONFLICT DO NOTHING
-                """), {
-                    'name': block_name,
-                    'order': block_order,
-                    'desc': description
-                })
-
             session.commit()
-            logger.info("✓ dim_criteria_block table created and populated")
+            logger.info("✓ dim_criteria_block table created")
 
-        else:
-            logger.info("✓ Table dim_criteria_block already exists, skipping migration")
+        # Add missing columns to dim_indicator
+        inspector = inspect(engine)  # Refresh inspector
+        indicator_columns = [col['name'] for col in inspector.get_columns('dim_indicator')]
 
+        if 'block_id' not in indicator_columns:
+            logger.info("🔄 Running migration: Adding block_id to dim_indicator...")
+            session.execute(text("""
+                ALTER TABLE dim_indicator
+                ADD COLUMN block_id INTEGER REFERENCES dim_criteria_block(block_id)
+            """))
+            session.commit()
+            logger.info("✓ block_id column added to dim_indicator")
+
+        if 'criteria_order' not in indicator_columns:
+            logger.info("🔄 Running migration: Adding criteria_order to dim_indicator...")
+            session.execute(text("""
+                ALTER TABLE dim_indicator
+                ADD COLUMN criteria_order INTEGER
+            """))
+            session.commit()
+            logger.info("✓ criteria_order column added to dim_indicator")
+
+        # Insert criteria blocks if they don't exist
+        logger.info("🔄 Populating criteria blocks...")
+        blocks = [
+            ('Политический менеджмент', 1, 'Критерии политического управления МО'),
+            ('Забота и внимание', 2, 'Критерии социальной политики и вовлеченности'),
+            ('Развитие кадрового и проектного потенциала МО', 3, 'Критерии развития кадров и проектов'),
+            ('Штрафные критерии', 4, 'Критерии с отрицательными баллами'),
+        ]
+
+        for block_name, block_order, description in blocks:
+            session.execute(text("""
+                INSERT INTO dim_criteria_block (block_name, block_order, description, is_visible)
+                VALUES (:name, :order, :desc, true)
+                ON CONFLICT (block_name) DO NOTHING
+            """), {
+                'name': block_name,
+                'order': block_order,
+                'desc': description
+            })
+
+        session.commit()
+        logger.info("✓ Criteria blocks populated")
         session.close()
 
     except Exception as e:
         logger.error(f"✗ Criteria blocks migration failed: {str(e)}")
         logger.info("⚠ App will continue, but criteria blocks may not be set up")
         try:
+            session.rollback()
             session.close()
         except:
             pass
