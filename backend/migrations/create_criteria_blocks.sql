@@ -26,9 +26,9 @@ INSERT INTO dim_criteria_block (block_name, block_order, description, is_visible
     ('Штрафные критерии', 4, 'Критерии с отрицательными баллами', true)
 ON CONFLICT DO NOTHING;
 
--- 4. Insert criteria into dim_indicator with proper block assignment
+-- 4. Insert all 19 criteria into dim_indicator with proper block assignment
 INSERT INTO dim_indicator (code, name, block, description, unit, is_public, weight, created_at, updated_at) VALUES
-    -- Блок 1: Политический менеджмент (9 критериев)
+    -- Блок 1: Политический менеджмент (9 критериев: 1-9)
     ('pm_01', 'Оценка поддержки руководства области', 'Политический менеджмент', 'Уровень поддержки главой МО региональной администрации', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('pm_02', 'Выполнение задач АГП', 'Политический менеджмент', 'Выполнение задач Аппарата Губернатора', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('pm_03', 'Позиционирование главы МО', 'Политический менеджмент', 'Статус и видимость главы МО в политическом процессе', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -39,13 +39,13 @@ INSERT INTO dim_indicator (code, name, block, description, unit, is_public, weig
     ('pm_08', 'Показатели АГП (Качество)', 'Политический менеджмент', 'Качество выполнения показателей АГП', 'баллы', false, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('pm_09', 'Экономическая привлекательность МО', 'Политический менеджмент', 'Уровень экономической привлекательности МО', 'баллы', false, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 
-    -- Блок 2: Забота и внимание (4 критерия)
+    -- Блок 2: Забота и внимание (4 критерия: 10-13)
     ('ca_01', 'Вовлеченность молодежи (Добровольчество)', 'Забота и внимание', 'Уровень вовлеченности молодежи в добровольческую деятельность', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('ca_02', 'Вовлеченность молодежи (Движение Первых)', 'Забота и внимание', 'Уровень вовлеченности молодежи в Движение Первых', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('ca_03', 'Личная работа главы с ветеранами СВО', 'Забота и внимание', 'Уровень личного взаимодействия главы с ветеранами СВО', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('ca_04', 'Партийная принадлежность ветеранов СВО', 'Забота и внимание', 'Партийная принадлежность ветеранов СВО', 'баллы', false, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 
-    -- Блок 3: Развитие кадрового и проектного потенциала (3 критерия)
+    -- Блок 3: Развитие кадрового и проектного потенциала (3 критерия: 14-16)
     ('dev_01', 'Кадровый управленческий резерв', 'Развитие кадрового и проектного потенциала МО', 'Наличие и развитие управленческого кадрового резерва', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('dev_02', 'Работа с грантами', 'Развитие кадрового и проектного потенциала МО', 'Успешность участия в грантовых программах', 'баллы', true, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('dev_03', 'Участие в проекте «Гордость Липецкой земли»', 'Развитие кадрового и проектного потенциала МО', 'Участие и результаты в проекте «Гордость Липецкой земли»', 'баллы', false, 1.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -77,7 +77,12 @@ FROM dim_criteria_block b
 LEFT JOIN dim_indicator i ON i.block = b.block_name
 ORDER BY b.block_order, i.weight DESC;
 
--- Verification
+-- Verification: All 19 criteria + 3 penalties = 22 total
+-- Expected results:
+-- - Block 1 (Политический менеджмент): 9 criteria (codes pm_01 to pm_09, numbers 1-9)
+-- - Block 2 (Забота и внимание): 4 criteria (codes ca_01 to ca_04, numbers 10-13)
+-- - Block 3 (Развитие кадров): 3 criteria (codes dev_01 to dev_03, numbers 14-16)
+-- - Penalties: 3 penalties (codes pen_01 to pen_03, numbers 17-19)
 SELECT * FROM dim_criteria_block ORDER BY block_order;
 SELECT COUNT(*) as total_criteria FROM dim_indicator WHERE code LIKE 'pm_%' OR code LIKE 'ca_%' OR code LIKE 'dev_%';
 SELECT COUNT(*) as total_penalties FROM dim_penalty WHERE block = 'Штрафные критерии';

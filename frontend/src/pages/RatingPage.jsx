@@ -11,17 +11,22 @@ export default function RatingPage({ period }) {
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const pageSize = 50;
 
-  // Структура критериев по блокам
+  // Структура критериев по блокам (все 19 критериев + 3 штрафа = 22)
   const blocksConfig = [
     {
       id: 1,
       name: 'Политический менеджмент',
       color: 'blue',
       criteria: [
-        { code: 'pm_01', label: 'Поддержка руководства' },
-        { code: 'pm_02', label: 'Задачи АГП' },
-        { code: 'pm_03', label: 'Позиционирование' },
-        { code: 'pm_04', label: 'Проекты' },
+        { code: 'pm_01', number: '1', label: 'Оценка поддержки руководства области' },
+        { code: 'pm_02', number: '2', label: 'Выполнение задач АГП' },
+        { code: 'pm_03', number: '3', label: 'Позиционирование главы МО' },
+        { code: 'pm_04', number: '4', label: 'Проектная деятельность' },
+        { code: 'pm_05', number: '5', label: 'Партийная принадлежность (Закр.)' },
+        { code: 'pm_06', number: '6', label: 'Распределение мандатов (Закр.)' },
+        { code: 'pm_07', number: '7', label: 'АГП Уровень (Закр.)' },
+        { code: 'pm_08', number: '8', label: 'АГП Качество (Закр.)' },
+        { code: 'pm_09', number: '9', label: 'Экон. привлекательность (Закр.)' },
       ],
     },
     {
@@ -29,26 +34,28 @@ export default function RatingPage({ period }) {
       name: 'Забота и внимание',
       color: 'green',
       criteria: [
-        { code: 'ca_01', label: 'Добровольчество' },
-        { code: 'ca_02', label: 'Движение Первых' },
-        { code: 'ca_03', label: 'Ветераны СВО' },
+        { code: 'ca_01', number: '10', label: 'Вовлеченность молодежи (Добровольчество)' },
+        { code: 'ca_02', number: '11', label: 'Вовлеченность молодежи (Движение Первых)' },
+        { code: 'ca_03', number: '12', label: 'Личная работа главы с ветеранами СВО' },
+        { code: 'ca_04', number: '13', label: 'Партийная принадлежность ветеранов (Закр.)' },
       ],
     },
     {
       id: 3,
-      name: 'Развитие кадров',
+      name: 'Развитие кадрового и проектного потенциала МО',
       color: 'purple',
       criteria: [
-        { code: 'dev_01', label: 'Кадровый резерв' },
-        { code: 'dev_02', label: 'Гранты' },
+        { code: 'dev_01', number: '14', label: 'Кадровый управленческий резерв' },
+        { code: 'dev_02', number: '15', label: 'Работа с грантами' },
+        { code: 'dev_03', number: '16', label: 'Проект "Гордость Липецкой земли" (Закр.)' },
       ],
     },
   ];
 
   const penaltyColumns = [
-    { code: 'pen_01', label: 'Конфликты' },
-    { code: 'pen_02', label: 'Внутри-конфликты' },
-    { code: 'pen_03', label: 'ПО данные' },
+    { code: 'pen_01', number: '17', label: 'Конфликты с региональной властью' },
+    { code: 'pen_02', number: '18', label: 'Внутримуниципальные конфликты' },
+    { code: 'pen_03', number: '19', label: 'Данные правоохранительных органов' },
   ];
 
   useEffect(() => {
@@ -237,16 +244,16 @@ export default function RatingPage({ period }) {
                   block.criteria.map((criteria) => (
                     <th
                       key={criteria.code}
-                      className={`px-2 py-2 text-center font-medium text-gray-600 border-r border-gray-200 text-xs ${
+                      className={`px-2 py-2 text-center font-medium border-r border-gray-200 text-sm ${
                         block.color === 'blue'
-                          ? 'bg-blue-50'
+                          ? 'bg-blue-50 text-blue-900'
                           : block.color === 'green'
-                          ? 'bg-green-50'
-                          : 'bg-purple-50'
+                          ? 'bg-green-50 text-green-900'
+                          : 'bg-purple-50 text-purple-900'
                       }`}
+                      title={criteria.label}
                     >
-                      <span className="text-gray-700 font-medium">{criteria.code}</span>
-                      <div className="text-gray-500 text-xs mt-1">{criteria.label}</div>
+                      {criteria.number}
                     </th>
                   ))
                 )}
@@ -255,10 +262,10 @@ export default function RatingPage({ period }) {
                 {penaltyColumns.map((col) => (
                   <th
                     key={col.code}
-                    className="px-2 py-2 text-center font-medium text-gray-600 bg-red-50 border-r border-gray-200 text-xs"
+                    className="px-2 py-2 text-center font-medium bg-red-50 text-red-900 border-r border-gray-200 text-sm"
+                    title={col.label}
                   >
-                    <span className="text-gray-700 font-medium">{col.code}</span>
-                    <div className="text-gray-500 text-xs mt-1">{col.label}</div>
+                    {col.number}
                   </th>
                 ))}
 
