@@ -408,6 +408,144 @@ def ensure_proper_indicator_codes():
             pass
 
 
+
+def implement_official_methodology():
+    """Implement official methodology: 16 criteria"""
+    logger.info("🔄 Running migration: Implement official methodology...")
+    try:
+        session = SessionLocal()
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN rating_type VARCHAR(50)"))
+        except:
+            pass
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN is_penalty BOOLEAN DEFAULT FALSE"))
+        except:
+            pass
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN max_points INTEGER"))
+        except:
+            pass
+        session.commit()
+        
+        official_count = session.query(DimIndicator).filter(
+            DimIndicator.code.in_(['pub_1','pub_2','pub_3','pub_4','pub_5','pub_6','pub_7','pub_8','pub_9',
+                'closed_1','closed_2','closed_3','closed_4','closed_5','closed_6','closed_7','closed_8',
+                'pen_1','pen_2','pen_3'])
+        ).count()
+        
+        if official_count < 16:
+            logger.info("Creating official 16 criteria...")
+            public_criteria = [
+                DimIndicator(code='pub_1', name='Поддержка руководства области', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_2', name='Выполнение задач АГП', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=5),
+                DimIndicator(code='pub_3', name='Позиционирование главы МО', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_4', name='Проектная деятельность главы', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_5', name='Молодежь в добровольчестве', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_6', name='Молодежь в Движении Первых', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_7', name='Работа с ветеранами СВО', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_8', name='Кадровый управленческий резерв', block='Развитие кадрового потенциала', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_9', name='Работа с грантами', block='Развитие кадрового потенциала', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+            ]
+            closed_criteria = [
+                DimIndicator(code='closed_1', name='Партийное мнение в администрации', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=6),
+                DimIndicator(code='closed_2', name='Альтернативное мнение в органе', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=4),
+                DimIndicator(code='closed_3', name='Целевые показатели АГП (уровень)', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=5),
+                DimIndicator(code='closed_4', name='Целевые показатели АГП (качество)', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=5),
+                DimIndicator(code='closed_5', name='Экономическая привлекательность МО', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=3),
+                DimIndicator(code='closed_6', name='Работа с ветеранами СВО', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=3),
+                DimIndicator(code='closed_7', name='Политическая деятельность ветеранов', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=6),
+                DimIndicator(code='closed_8', name='Проект Гордость Липецкой земли', block='Развитие кадрового потенциала', rating_type='ЗАКРЫТЫЙ', max_points=2),
+            ]
+            penalty_criteria = [
+                DimIndicator(code='pen_1', name='Конфликты с региональной властью', block='Штрафные критерии', max_points=-3, is_penalty=True),
+                DimIndicator(code='pen_2', name='Внутримуниципальные конфликты', block='Штрафные критерии', max_points=-3, is_penalty=True),
+                DimIndicator(code='pen_3', name='Правоохранительные органы', block='Штрафные критерии', max_points=-5, is_penalty=True),
+            ]
+            for criterion in public_criteria + closed_criteria + penalty_criteria:
+                session.add(criterion)
+            session.commit()
+            logger.info("✓ Created 16 official criteria")
+        else:
+            logger.info("✓ Official methodology indicators already exist")
+        session.close()
+    except Exception as e:
+        logger.error(f"✗ Official methodology migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
+def implement_official_methodology():
+    """Implement official methodology: 16 criteria"""
+    logger.info("Running migration: Implement official methodology...")
+    try:
+        session = SessionLocal()
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN rating_type VARCHAR(50)"))
+        except:
+            pass
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN is_penalty BOOLEAN DEFAULT FALSE"))
+        except:
+            pass
+        try:
+            session.execute(text("ALTER TABLE dim_indicator ADD COLUMN max_points INTEGER"))
+        except:
+            pass
+        session.commit()
+        
+        official_count = session.query(DimIndicator).filter(
+            DimIndicator.code.in_(['pub_1','pub_2','pub_3','pub_4','pub_5','pub_6','pub_7','pub_8','pub_9',
+                'closed_1','closed_2','closed_3','closed_4','closed_5','closed_6','closed_7','closed_8',
+                'pen_1','pen_2','pen_3'])
+        ).count()
+        
+        if official_count < 16:
+            logger.info("Creating official 16 criteria...")
+            public_criteria = [
+                DimIndicator(code='pub_1', name='Поддержка руководства области', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_2', name='Выполнение задач АГП', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=5),
+                DimIndicator(code='pub_3', name='Позиционирование главы МО', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_4', name='Проектная деятельность главы', block='Политический менеджмент', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_5', name='Молодежь в добровольчестве', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_6', name='Молодежь в Движении Первых', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_7', name='Работа с ветеранами СВО', block='Забота и внимание', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_8', name='Кадровый управленческий резерв', block='Развитие кадрового потенциала', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+                DimIndicator(code='pub_9', name='Работа с грантами', block='Развитие кадрового потенциала', rating_type='ПУБЛИЧНЫЙ', max_points=3),
+            ]
+            closed_criteria = [
+                DimIndicator(code='closed_1', name='Партийное мнение в администрации', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=6),
+                DimIndicator(code='closed_2', name='Альтернативное мнение в органе', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=4),
+                DimIndicator(code='closed_3', name='Целевые показатели АГП (уровень)', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=5),
+                DimIndicator(code='closed_4', name='Целевые показатели АГП (качество)', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=5),
+                DimIndicator(code='closed_5', name='Экономическая привлекательность МО', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=3),
+                DimIndicator(code='closed_6', name='Работа с ветеранами СВО', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=3),
+                DimIndicator(code='closed_7', name='Политическая деятельность ветеранов', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=6),
+                DimIndicator(code='closed_8', name='Проект Гордость Липецкой земли', block='Развитие кадрового потенциала', rating_type='ЗАКРЫТЫЙ', max_points=2),
+            ]
+            penalty_criteria = [
+                DimIndicator(code='pen_1', name='Конфликты с региональной властью', block='Штрафные критерии', max_points=-3, is_penalty=True),
+                DimIndicator(code='pen_2', name='Внутримуниципальные конфликты', block='Штрафные критерии', max_points=-3, is_penalty=True),
+                DimIndicator(code='pen_3', name='Правоохранительные органы', block='Штрафные критерии', max_points=-5, is_penalty=True),
+            ]
+            for criterion in public_criteria + closed_criteria + penalty_criteria:
+                session.add(criterion)
+            session.commit()
+            logger.info("Created 16 official criteria")
+        else:
+            logger.info("Official methodology indicators already exist")
+        session.close()
+    except Exception as e:
+        logger.error(f"Official methodology migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
 def run_all_migrations():
     """Run all database migrations on startup"""
     logger.info("=" * 80)
@@ -420,6 +558,7 @@ def run_all_migrations():
     apply_criteria_blocks_migration()           # Create criteria blocks
     ensure_proper_indicator_codes()             # Ensure indicators have proper codes (pm_*, ca_*, etc)
     fix_fact_indicator_scores()                 # Fix NULL scores in fact_indicator
+    implement_official_methodology()                 # Implement official methodology
 
     logger.info("=" * 80)
     logger.info("✓ All migrations completed")
