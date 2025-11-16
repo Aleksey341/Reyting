@@ -1,16 +1,13 @@
-"""
-Simplified rating routes without detailed indicator/penalty scores.
-Use this if the detailed scores version has issues.
-"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, func as db_func
 from typing import Optional
 from datetime import datetime
 import logging
+import json
 
 from database import get_db
-from models import DimMO, FactSummary, DimPeriod
+from models import DimMO, FactSummary, DimPeriod, FactIndicator, FactPenalty, DimIndicator, DimPenalty
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -27,7 +24,7 @@ async def get_rating(
     db: Session = Depends(get_db),
 ):
     """
-    Get rating table with MO scores (simplified version).
+    Get rating table with MO scores.
     Supports sorting, pagination, and filtering by period/version.
     """
     try:
@@ -40,6 +37,8 @@ async def get_rating(
             FactSummary.score_penalties,
             FactSummary.score_total,
             FactSummary.zone,
+            FactSummary.period_id,
+            FactSummary.version_id,
             FactSummary.updated_at,
         ).join(
             FactSummary,
@@ -57,16 +56,6 @@ async def get_rating(
                 ).first()
                 if period_obj:
                     query = query.filter(FactSummary.period_id == period_obj.period_id)
-                else:
-                    logger.warning(f"Period not found for date: {period_date}")
-                    return {
-                        "status": "success",
-                        "total": 0,
-                        "page": page,
-                        "page_size": page_size,
-                        "total_pages": 0,
-                        "data": [],
-                    }
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid period format")
 
@@ -95,22 +84,71 @@ async def get_rating(
         offset = (page - 1) * page_size
         results = query.offset(offset).limit(page_size).all()
 
-        # Format response (simplified - no detailed indicators/penalties)
+        # Get detailed scores for each indicator and penalty
+        def get_detailed_scores(mo_id, period_id, version_id):
+            try:
+                # Get all indicator scores
+                indicators = db.query(
+                    DimIndicator.code,
+                    FactIndicator.score
+                ).outerjoin(
+                    DimIndicator,
+                    DimIndicator.ind_id == FactIndicator.ind_id
+                ).filter(
+                    FactIndicator.mo_id == mo_id,
+                    FactIndicator.period_id == period_id,
+                    FactIndicator.version_id == version_id
+                ).all()
+
+                # Get all penalty scores
+                penalties = db.query(
+                    DimPenalty.code,
+                    FactPenalty.score_negative
+                ).outerjoin(
+                    DimPenalty,
+                    DimPenalty.pen_id == FactPenalty.pen_id
+                ).filter(
+                    FactPenalty.mo_id == mo_id,
+                    FactPenalty.period_id == period_id,
+                    FactPenalty.version_id == version_id
+                ).all()
+
+                return {
+                    "indicators": {ind[0]: float(ind[1]) if ind[1] else 0 for ind in indicators},
+                    "penalties": {pen[0]: float(pen[1]) if pen[1] else 0 for pen in penalties}
+                }
+            except Exception as e:
+                logger.error(f"Error getting detailed scores: {str(e)}")
+                return {
+                    "indicators": {},
+                    "penalties": {}
+                }
+
+        # Format response
         items = []
         for r in results:
-            items.append({
-                "mo_id": r[0],
-                "mo_name": r[1],
-                "leader_name": r[2] or "Не указано",
-                "score_public": float(r[3]) if r[3] else 0,
-                "score_closed": float(r[4]) if r[4] else 0,
-                "score_penalties": float(r[5]) if r[5] else 0,
-                "score_total": float(r[6]) if r[6] else 0,
-                "zone": r[7],
-                "indicators": {},  # Empty for now
-                "penalties": {},   # Empty for now
-                "updated_at": r[8].isoformat() if r[8] else None,
-            })
+            try:
+                mo_id, mo_name, leader_name = r[0], r[1], r[2]
+                period_id, version_id = r[8], r[9]
+
+                detailed_scores = get_detailed_scores(mo_id, period_id, version_id)
+
+                items.append({
+                    "mo_id": mo_id,
+                    "mo_name": mo_name,
+                    "leader_name": leader_name or "Не указано",
+                    "score_public": float(r[3]) if r[3] else 0,
+                    "score_closed": float(r[4]) if r[4] else 0,
+                    "score_penalties": float(r[5]) if r[5] else 0,
+                    "score_total": float(r[6]) if r[6] else 0,
+                    "zone": r[7],
+                    "indicators": detailed_scores["indicators"],
+                    "penalties": detailed_scores["penalties"],
+                    "updated_at": r[10].isoformat() if r[10] else None,
+                })
+            except Exception as e:
+                logger.error(f"Error formatting rating item {mo_id}: {str(e)}")
+                continue
 
         return {
             "status": "success",
@@ -143,7 +181,6 @@ async def compare_mos(
         query = db.query(
             DimMO.mo_id,
             DimMO.mo_name,
-            DimMO.leader_name,
             FactSummary.score_public,
             FactSummary.score_closed,
             FactSummary.score_total,
@@ -172,11 +209,10 @@ async def compare_mos(
             {
                 "mo_id": r[0],
                 "mo_name": r[1],
-                "leader_name": r[2] or "Не указано",
-                "score_public": float(r[3]) if r[3] else 0,
-                "score_closed": float(r[4]) if r[4] else 0,
-                "score_total": float(r[5]) if r[5] else 0,
-                "zone": r[6],
+                "score_public": float(r[2]) if r[2] else 0,
+                "score_closed": float(r[3]) if r[3] else 0,
+                "score_total": float(r[4]) if r[4] else 0,
+                "zone": r[5],
             }
             for r in results
         ]
