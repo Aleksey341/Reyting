@@ -77,6 +77,12 @@ class DimIndicator(Base):
     weight = Column(Float)
     min_value = Column(Float)
     max_value = Column(Float)
+
+    # Official methodology columns (from implement_official_methodology migration)
+    rating_type = Column(String(50))  # 'ПУБЛИЧНЫЙ' or 'ЗАКРЫТЫЙ' or NULL for penalties
+    is_penalty = Column(Boolean, default=False)  # TRUE for penalty criteria
+    max_points = Column(Integer)  # Maximum points for this criterion
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

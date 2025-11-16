@@ -11,51 +11,59 @@ export default function RatingPage({ period }) {
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const pageSize = 50;
 
-  // Структура критериев по блокам (все 19 критериев + 3 штрафа = 22)
+  // Official Methodology Structure (16 criteria + 3 penalties)
+  // ПУБЛИЧНЫЙ (PUBLIC): 9 criteria = 31 points max
+  // ЗАКРЫТЫЙ (CLOSED): 8 criteria = 35 points max
+  // Штрафы (PENALTIES): 3 criteria = -10 points max
   const blocksConfig = [
     {
       id: 1,
-      name: 'Политический менеджмент',
+      name: 'ПУБЛИЧНЫЙ РЕЙТИНГ',
+      ratingType: 'ПУБЛИЧНЫЙ',
       color: 'blue',
+      maxPoints: 31,
       criteria: [
-        { code: 'pm_01', number: '1', label: 'Оценка поддержки руководства области' },
-        { code: 'pm_02', number: '2', label: 'Выполнение задач АГП' },
-        { code: 'pm_03', number: '3', label: 'Позиционирование главы МО' },
-        { code: 'pm_04', number: '4', label: 'Проектная деятельность' },
-        { code: 'pm_05', number: '5', label: 'Партийная принадлежность (Закр.)' },
-        { code: 'pm_06', number: '6', label: 'Распределение мандатов (Закр.)' },
-        { code: 'pm_07', number: '7', label: 'АГП Уровень (Закр.)' },
-        { code: 'pm_08', number: '8', label: 'АГП Качество (Закр.)' },
-        { code: 'pm_09', number: '9', label: 'Экон. привлекательность (Закр.)' },
+        // Block 1: Political Management (4 criteria = 14 points)
+        { code: 'pub_1', number: '1', label: 'Поддержка руководства области', maxPoints: 3 },
+        { code: 'pub_2', number: '2', label: 'Выполнение задач АГП', maxPoints: 5 },
+        { code: 'pub_3', number: '3', label: 'Позиционирование главы МО', maxPoints: 3 },
+        { code: 'pub_4', number: '4', label: 'Проектная деятельность', maxPoints: 3 },
+        // Block 2: Care & Attention (3 criteria = 9 points)
+        { code: 'pub_5', number: '5', label: 'Молодежь в добровольчестве', maxPoints: 3 },
+        { code: 'pub_6', number: '6', label: 'Молодежь в Движении Первых', maxPoints: 3 },
+        { code: 'pub_7', number: '7', label: 'Работа с ветеранами СВО', maxPoints: 3 },
+        // Block 3: Development (2 criteria = 6 points)
+        { code: 'pub_8', number: '8', label: 'Кадровый резерв', maxPoints: 3 },
+        { code: 'pub_9', number: '9', label: 'Работа с грантами', maxPoints: 3 },
       ],
     },
     {
       id: 2,
-      name: 'Забота и внимание',
-      color: 'green',
-      criteria: [
-        { code: 'ca_01', number: '10', label: 'Вовлеченность молодежи (Добровольчество)' },
-        { code: 'ca_02', number: '11', label: 'Вовлеченность молодежи (Движение Первых)' },
-        { code: 'ca_03', number: '12', label: 'Личная работа главы с ветеранами СВО' },
-        { code: 'ca_04', number: '13', label: 'Партийная принадлежность ветеранов (Закр.)' },
-      ],
-    },
-    {
-      id: 3,
-      name: 'Развитие кадрового и проектного потенциала МО',
+      name: 'ЗАКРЫТЫЙ РЕЙТИНГ',
+      ratingType: 'ЗАКРЫТЫЙ',
       color: 'purple',
+      maxPoints: 35,
       criteria: [
-        { code: 'dev_01', number: '14', label: 'Кадровый управленческий резерв' },
-        { code: 'dev_02', number: '15', label: 'Работа с грантами' },
-        { code: 'dev_03', number: '16', label: 'Проект "Гордость Липецкой земли" (Закр.)' },
+        // Block 1: Political Management (5 criteria = 23 points)
+        { code: 'closed_1', number: '10', label: 'Партийное мнение в администрации', maxPoints: 6 },
+        { code: 'closed_2', number: '11', label: 'Альтернативное мнение в органе', maxPoints: 4 },
+        { code: 'closed_3', number: '12', label: 'Целевые показатели АГП (уровень)', maxPoints: 5 },
+        { code: 'closed_4', number: '13', label: 'Целевые показатели АГП (качество)', maxPoints: 5 },
+        { code: 'closed_5', number: '14', label: 'Экономическая привлекательность', maxPoints: 3 },
+        // Block 2: Care & Attention (2 criteria = 9 points)
+        { code: 'closed_6', number: '15', label: 'Работа с ветеранами СВО (закрыто)', maxPoints: 3 },
+        { code: 'closed_7', number: '16', label: 'Политическая деятельность ветеранов', maxPoints: 6 },
+        // Block 3: Development (1 criterion = 2 points)
+        { code: 'closed_8', number: '17', label: 'Проект "Гордость Липецкой земли"', maxPoints: 2 },
       ],
     },
   ];
 
+  // Penalty criteria (reduce total score)
   const penaltyColumns = [
-    { code: 'pen_01', number: '17', label: 'Конфликты с региональной властью' },
-    { code: 'pen_02', number: '18', label: 'Внутримуниципальные конфликты' },
-    { code: 'pen_03', number: '19', label: 'Данные правоохранительных органов' },
+    { code: 'pen_1', number: 'П1', label: 'Конфликты с региональной властью', maxPoints: -3 },
+    { code: 'pen_2', number: 'П2', label: 'Внутримуниципальные конфликты', maxPoints: -3 },
+    { code: 'pen_3', number: 'П3', label: 'Правоохранительные органы', maxPoints: -5 },
   ];
 
   useEffect(() => {

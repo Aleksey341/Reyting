@@ -12,6 +12,7 @@ from database import engine, Base
 from routes import (
     map_routes,
     rating_routes,
+    rating_routes_methodology,
     indicator_routes,
     methodology_routes,
     upload_routes,
@@ -139,6 +140,7 @@ async def api_info():
 # Include routers
 app.include_router(map_routes.router, prefix="/api/map", tags=["map"])
 app.include_router(rating_routes.router, prefix="/api/rating", tags=["rating"])
+app.include_router(rating_routes_methodology.router, prefix="/api/rating", tags=["rating-methodology"])
 app.include_router(indicator_routes.router, prefix="/api/indicators", tags=["indicators"])
 app.include_router(methodology_routes.router, prefix="/api/methodology", tags=["methodology"])
 app.include_router(upload_routes.router, prefix="/api/upload", tags=["upload"])
