@@ -8,34 +8,47 @@ export default function RatingPage({ period }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sort, setSort] = useState('score_total');
   const [showZoneModal, setShowZoneModal] = useState(false);
+  const [expandedBlocks, setExpandedBlocks] = useState({});
   const pageSize = 50;
 
-  // Предопределенные параметры (столбцы для баллов)
-  const parameterColumns = [
-    { code: '1', label: '1' },
-    { code: '2', label: '2' },
-    { code: '3', label: '3' },
-    { code: '4', label: '4' },
-    { code: '5', label: '5' },
-    { code: '6', label: '6' },
-    { code: '7', label: '7' },
-    { code: '8', label: '8' },
-    { code: '9', label: '9' },
-    { code: '10', label: '10' },
-    { code: '11', label: '11' },
-    { code: '12', label: '12' },
-    { code: '13', label: '13' },
-    { code: '14', label: '14' },
-    { code: '15', label: '15' },
-    { code: '16', label: '16' },
-    { code: '17', label: '17' },
+  // Структура критериев по блокам
+  const blocksConfig = [
+    {
+      id: 1,
+      name: 'Политический менеджмент',
+      color: 'blue',
+      criteria: [
+        { code: 'pm_01', label: 'Поддержка руководства' },
+        { code: 'pm_02', label: 'Задачи АГП' },
+        { code: 'pm_03', label: 'Позиционирование' },
+        { code: 'pm_04', label: 'Проекты' },
+      ],
+    },
+    {
+      id: 2,
+      name: 'Забота и внимание',
+      color: 'green',
+      criteria: [
+        { code: 'ca_01', label: 'Добровольчество' },
+        { code: 'ca_02', label: 'Движение Первых' },
+        { code: 'ca_03', label: 'Ветераны СВО' },
+      ],
+    },
+    {
+      id: 3,
+      name: 'Развитие кадров',
+      color: 'purple',
+      criteria: [
+        { code: 'dev_01', label: 'Кадровый резерв' },
+        { code: 'dev_02', label: 'Гранты' },
+      ],
+    },
   ];
 
   const penaltyColumns = [
-    { code: 'penalty_18', label: '18' },
-    { code: 'penalty_19', label: '19' },
-    { code: 'penalty_20', label: '20' },
-    { code: 'penalty_21', label: '21' },
+    { code: 'pen_01', label: 'Конфликты' },
+    { code: 'pen_02', label: 'Внутри-конфликты' },
+    { code: 'pen_03', label: 'ПО данные' },
   ];
 
   useEffect(() => {
@@ -77,16 +90,47 @@ export default function RatingPage({ period }) {
     return labels[zone] || 'Нет данных';
   };
 
-  const getIndicatorScore = (item, code) => {
-    return item.indicators && item.indicators[code] !== undefined
-      ? item.indicators[code]
-      : 0;
+  // Получить баллы критерия из блока
+  const getCriteriaScore = (item, criteriaCode) => {
+    if (!item.blocks) return 0;
+    for (const block of item.blocks) {
+      for (const criteria of block.criteria || []) {
+        if (criteria.code === criteriaCode) {
+          return criteria.score || 0;
+        }
+      }
+    }
+    return 0;
   };
 
-  const getPenaltyScore = (item, code) => {
-    return item.penalties && item.penalties[code] !== undefined
-      ? item.penalties[code]
-      : 0;
+  // Получить баллы штрафа
+  const getPenaltyScore = (item, penaltyCode) => {
+    if (!item.penalties) return 0;
+    for (const penalty of item.penalties) {
+      if (penalty.code === penaltyCode) {
+        return penalty.score || 0;
+      }
+    }
+    return 0;
+  };
+
+  // Получить блок для критерия
+  const getBlockIdForCriteria = (criteriaCode) => {
+    for (const block of blocksConfig) {
+      for (const criteria of block.criteria) {
+        if (criteria.code === criteriaCode) {
+          return block.id;
+        }
+      }
+    }
+    return null;
+  };
+
+  const toggleBlockExpand = (blockId) => {
+    setExpandedBlocks(prev => ({
+      ...prev,
+      [blockId]: !prev[blockId]
+    }));
   };
 
   if (loading) {
@@ -141,27 +185,36 @@ export default function RatingPage({ period }) {
         <div className="overflow-x-auto border rounded-lg">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b sticky top-0">
+              {/* Первый ряд - основные колонки и блоки */}
               <tr>
-                {/* Зафиксированные колонки */}
                 <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 min-w-[40px]">
                   №
                 </th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 min-w-[180px]">
-                  Главы муниципалитетов
+                <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 min-w-[200px]">
+                  Муниципальное образование
                 </th>
                 <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 min-w-[150px]">
                   ФИО главы
                 </th>
 
-                {/* Заголовок для раздела "Баллы за критерии" */}
-                <th
-                  colSpan={parameterColumns.length}
-                  className="px-3 py-3 text-center font-semibold text-gray-700 bg-blue-50 border-l border-r border-gray-300"
-                >
-                  Баллы за критерии
-                </th>
+                {/* Блоки критериев */}
+                {blocksConfig.map((block) => (
+                  <th
+                    key={block.id}
+                    colSpan={block.criteria.length}
+                    className={`px-3 py-3 text-center font-semibold text-gray-700 border-l border-r border-gray-300 ${
+                      block.color === 'blue'
+                        ? 'bg-blue-50'
+                        : block.color === 'green'
+                        ? 'bg-green-50'
+                        : 'bg-purple-50'
+                    }`}
+                  >
+                    {block.name}
+                  </th>
+                ))}
 
-                {/* Заголовок для раздела "Штрафы" */}
+                {/* Штрафы */}
                 <th
                   colSpan={penaltyColumns.length}
                   className="px-3 py-3 text-center font-semibold text-gray-700 bg-red-50 border-l border-r border-gray-300"
@@ -175,25 +228,40 @@ export default function RatingPage({ period }) {
                 </th>
               </tr>
 
-              {/* Второй ряд заголовка - номера критериев */}
+              {/* Второй ряд - названия критериев */}
               <tr>
                 <th colSpan="3" className="px-3 py-2 bg-gray-50"></th>
-                {parameterColumns.map((col) => (
-                  <th
-                    key={col.code}
-                    className="px-2 py-2 text-center font-medium text-gray-600 bg-blue-50 border-r border-gray-200 text-xs"
-                  >
-                    {col.label}
-                  </th>
-                ))}
+
+                {/* Критерии для каждого блока */}
+                {blocksConfig.map((block) =>
+                  block.criteria.map((criteria) => (
+                    <th
+                      key={criteria.code}
+                      className={`px-2 py-2 text-center font-medium text-gray-600 border-r border-gray-200 text-xs ${
+                        block.color === 'blue'
+                          ? 'bg-blue-50'
+                          : block.color === 'green'
+                          ? 'bg-green-50'
+                          : 'bg-purple-50'
+                      }`}
+                    >
+                      <span className="text-gray-700 font-medium">{criteria.code}</span>
+                      <div className="text-gray-500 text-xs mt-1">{criteria.label}</div>
+                    </th>
+                  ))
+                )}
+
+                {/* Штрафы */}
                 {penaltyColumns.map((col) => (
                   <th
                     key={col.code}
                     className="px-2 py-2 text-center font-medium text-gray-600 bg-red-50 border-r border-gray-200 text-xs"
                   >
-                    {col.label}
+                    <span className="text-gray-700 font-medium">{col.code}</span>
+                    <div className="text-gray-500 text-xs mt-1">{col.label}</div>
                   </th>
                 ))}
+
                 <th className="px-3 py-2 bg-green-50"></th>
               </tr>
             </thead>
@@ -207,7 +275,7 @@ export default function RatingPage({ period }) {
                   </td>
 
                   {/* Название МО */}
-                  <td className="px-3 py-3 text-gray-900 font-medium bg-white min-w-[180px]">
+                  <td className="px-3 py-3 text-gray-900 font-medium bg-white min-w-[200px]">
                     {item.mo_name}
                   </td>
 
@@ -216,23 +284,31 @@ export default function RatingPage({ period }) {
                     {item.leader_name}
                   </td>
 
-                  {/* Баллы за критерии */}
-                  {parameterColumns.map((col) => (
-                    <td
-                      key={col.code}
-                      className="px-2 py-3 text-center text-gray-600 border-r border-gray-200 bg-blue-50 text-sm"
-                    >
-                      {getIndicatorScore(item, col.code)}
-                    </td>
-                  ))}
+                  {/* Критерии по блокам */}
+                  {blocksConfig.map((block) =>
+                    block.criteria.map((criteria) => (
+                      <td
+                        key={criteria.code}
+                        className={`px-2 py-3 text-center border-r border-gray-200 text-sm font-medium ${
+                          block.color === 'blue'
+                            ? 'bg-blue-50 text-gray-700'
+                            : block.color === 'green'
+                            ? 'bg-green-50 text-gray-700'
+                            : 'bg-purple-50 text-gray-700'
+                        }`}
+                      >
+                        {getCriteriaScore(item, criteria.code).toFixed(1)}
+                      </td>
+                    ))
+                  )}
 
                   {/* Штрафы */}
                   {penaltyColumns.map((col) => (
                     <td
                       key={col.code}
-                      className="px-2 py-3 text-center text-red-600 border-r border-gray-200 bg-red-50 text-sm font-medium"
+                      className="px-2 py-3 text-center text-red-700 border-r border-gray-200 bg-red-50 text-sm font-medium"
                     >
-                      {getPenaltyScore(item, col.code)}
+                      {getPenaltyScore(item, col.code).toFixed(1)}
                     </td>
                   ))}
 
@@ -243,6 +319,9 @@ export default function RatingPage({ period }) {
                         color: getScoreTextColor(item.score_total),
                         fontSize: '16px',
                         fontWeight: 'bold',
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        backgroundColor: getScoreColor(item.score_total) + '20',
                       }}
                     >
                       {item.score_total.toFixed(0)}
