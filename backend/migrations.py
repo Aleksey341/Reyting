@@ -307,6 +307,107 @@ def fix_fact_indicator_scores():
             pass
 
 
+def ensure_proper_indicator_codes():
+    """
+    Migration: Ensure dim_indicator has proper codes (pm_01, ca_01, dev_01, pen_01)
+    Delete indicators created by CSV import that don't have proper codes
+    """
+    try:
+        session = SessionLocal()
+
+        # Check how many indicators don't have proper codes
+        bad_indicators = session.execute(text("""
+            SELECT COUNT(*) FROM dim_indicator
+            WHERE code NOT LIKE 'pm_%'
+              AND code NOT LIKE 'ca_%'
+              AND code NOT LIKE 'dev_%'
+              AND code NOT LIKE 'pen_%'
+        """)).scalar()
+
+        if bad_indicators > 0:
+            logger.info(f"🔄 Running migration: Removing {bad_indicators} indicators with improper codes...")
+
+            # Delete foreign key constraints
+            session.execute(text("""
+                ALTER TABLE fact_indicator DROP CONSTRAINT IF EXISTS fact_indicator_ind_id_fkey
+            """))
+            session.execute(text("""
+                ALTER TABLE map_scale DROP CONSTRAINT IF EXISTS map_scale_ind_id_fkey
+            """))
+
+            # Delete bad indicators
+            session.execute(text("""
+                DELETE FROM dim_indicator
+                WHERE code NOT LIKE 'pm_%'
+                  AND code NOT LIKE 'ca_%'
+                  AND code NOT LIKE 'dev_%'
+                  AND code NOT LIKE 'pen_%'
+            """))
+
+            session.commit()
+            logger.info(f"✓ Removed {bad_indicators} indicators with improper codes")
+
+            # Now insert proper ones
+            logger.info("🔄 Inserting proper indicators with codes...")
+            proper_indicators = [
+                ('pm_01', 'Оценка поддержки руководства области', 'Политический менеджмент'),
+                ('pm_02', 'Выполнение задач АГП', 'Политический менеджмент'),
+                ('pm_03', 'Позиционирование главы МО', 'Политический менеджмент'),
+                ('pm_04', 'Проектная деятельность', 'Политический менеджмент'),
+                ('pm_05', 'Партийная принадлежность сотрудников', 'Политический менеджмент'),
+                ('pm_06', 'Распределение мандатов', 'Политический менеджмент'),
+                ('pm_07', 'Показатели АГП (Уровень)', 'Политический менеджмент'),
+                ('pm_08', 'Показатели АГП (Качество)', 'Политический менеджмент'),
+                ('pm_09', 'Экономическая привлекательность МО', 'Политический менеджмент'),
+                ('ca_01', 'Вовлеченность молодежи (Добровольчество)', 'Забота и внимание'),
+                ('ca_02', 'Вовлеченность молодежи (Движение Первых)', 'Забота и внимание'),
+                ('ca_03', 'Личная работа главы с ветеранами СВО', 'Забота и внимание'),
+                ('ca_04', 'Партийная принадлежность ветеранов СВО', 'Забота и внимание'),
+                ('dev_01', 'Кадровый управленческий резерв', 'Развитие кадрового и проектного потенциала МО'),
+                ('dev_02', 'Работа с грантами', 'Развитие кадрового и проектного потенциала МО'),
+                ('dev_03', 'Участие в проекте «Гордость Липецкой земли»', 'Развитие кадрового и проектного потенциала МО'),
+                ('pen_01', 'Конфликты с региональной властью', 'Штрафные критерии'),
+                ('pen_02', 'Внутримуниципальные конфликты', 'Штрафные критерии'),
+                ('pen_03', 'Данные правоохранительных органов', 'Штрафные критерии'),
+            ]
+
+            for code, name, block in proper_indicators:
+                session.execute(text("""
+                    INSERT INTO dim_indicator (code, name, block, is_public, weight)
+                    VALUES (:code, :name, :block, true, 1.0)
+                    ON CONFLICT (code) DO NOTHING
+                """), {'code': code, 'name': name, 'block': block})
+
+            session.commit()
+            logger.info("✓ Inserted 19 proper indicators")
+
+            # Re-add foreign keys
+            session.execute(text("""
+                ALTER TABLE fact_indicator ADD CONSTRAINT fact_indicator_ind_id_fkey
+                FOREIGN KEY (ind_id) REFERENCES dim_indicator(ind_id)
+            """))
+            session.execute(text("""
+                ALTER TABLE map_scale ADD CONSTRAINT map_scale_ind_id_fkey
+                FOREIGN KEY (ind_id) REFERENCES dim_indicator(ind_id)
+            """))
+
+            session.commit()
+            logger.info("✓ Re-added foreign key constraints")
+
+        else:
+            logger.info("✓ All indicators already have proper codes, skipping migration")
+
+        session.close()
+
+    except Exception as e:
+        logger.error(f"✗ Ensure proper indicator codes migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
 def run_all_migrations():
     """Run all database migrations on startup"""
     logger.info("=" * 80)
@@ -314,10 +415,11 @@ def run_all_migrations():
     logger.info("=" * 80)
 
     # Order matters! Fix table structure first, then add data
-    apply_dim_indicator_columns_migration()  # Fix dim_indicator table structure
-    apply_leader_name_column_migration()      # Add leader_name column and data
-    apply_criteria_blocks_migration()         # Create criteria blocks
-    fix_fact_indicator_scores()               # Fix NULL scores in fact_indicator
+    apply_dim_indicator_columns_migration()     # Fix dim_indicator table structure
+    apply_leader_name_column_migration()        # Add leader_name column and data
+    apply_criteria_blocks_migration()           # Create criteria blocks
+    ensure_proper_indicator_codes()             # Ensure indicators have proper codes (pm_*, ca_*, etc)
+    fix_fact_indicator_scores()                 # Fix NULL scores in fact_indicator
 
     logger.info("=" * 80)
     logger.info("✓ All migrations completed")
