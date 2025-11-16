@@ -251,6 +251,62 @@ def apply_criteria_blocks_migration():
             pass
 
 
+def fix_fact_indicator_scores():
+    """
+    Migration: Fix NULL score values in fact_indicator
+    Fill score from value_raw if score is NULL
+    """
+    try:
+        session = SessionLocal()
+
+        # Check if there are any NULL scores
+        null_score_count = session.execute(
+            text("SELECT COUNT(*) FROM fact_indicator WHERE score IS NULL")
+        ).scalar()
+
+        if null_score_count > 0:
+            logger.info(f"🔄 Running migration: Fixing {null_score_count} NULL scores in fact_indicator...")
+
+            # Update NULL scores from value_raw
+            session.execute(text("""
+                UPDATE fact_indicator
+                SET score = value_raw
+                WHERE score IS NULL AND value_raw IS NOT NULL
+            """))
+
+            # For records where both are NULL, set to 0
+            session.execute(text("""
+                UPDATE fact_indicator
+                SET score = 0
+                WHERE score IS NULL
+            """))
+
+            session.commit()
+
+            # Verify
+            result = session.execute(text("""
+                SELECT COUNT(*) as total,
+                       COUNT(CASE WHEN score IS NOT NULL THEN 1 END) as with_score,
+                       COUNT(CASE WHEN score IS NULL THEN 1 END) as without_score
+                FROM fact_indicator
+            """))
+            row = result.fetchone()
+            logger.info(f"✓ Fact indicator scores fixed: total={row[0]}, with_score={row[1]}, without_score={row[2]}")
+
+        else:
+            logger.info("✓ No NULL scores found in fact_indicator, skipping migration")
+
+        session.close()
+
+    except Exception as e:
+        logger.error(f"✗ Fact indicator scores migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
 def run_all_migrations():
     """Run all database migrations on startup"""
     logger.info("=" * 80)
@@ -261,6 +317,7 @@ def run_all_migrations():
     apply_dim_indicator_columns_migration()  # Fix dim_indicator table structure
     apply_leader_name_column_migration()      # Add leader_name column and data
     apply_criteria_blocks_migration()         # Create criteria blocks
+    fix_fact_indicator_scores()               # Fix NULL scores in fact_indicator
 
     logger.info("=" * 80)
     logger.info("✓ All migrations completed")
