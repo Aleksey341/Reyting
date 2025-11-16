@@ -11,6 +11,7 @@ class DimMO(Base):
 
     mo_id = Column(Integer, primary_key=True)
     mo_name = Column(String(255), nullable=False, unique=True)
+    leader_name = Column(String(255))  # ФИО главы МО
     oktmo = Column(String(11))
     okato = Column(String(5))
     lat = Column(Float)

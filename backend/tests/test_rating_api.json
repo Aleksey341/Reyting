@@ -1,0 +1,295 @@
+{
+  "test_cases": [
+    {
+      "name": "Получить рейтинг за ноябрь 2024",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "sort": "score_total",
+        "order": "desc",
+        "page": 1,
+        "page_size": 50
+      },
+      "expected_response": {
+        "status": "success",
+        "total": 20,
+        "page": 1,
+        "page_size": 50,
+        "total_pages": 1,
+        "data": [
+          {
+            "mo_id": 1,
+            "mo_name": "Липецк",
+            "leader_name": "Ченцов Р.И.",
+            "score_public": 55.0,
+            "score_closed": 15.0,
+            "score_penalties": -2.0,
+            "score_total": 68.0,
+            "zone": "green",
+            "indicators": {
+              "1": 3,
+              "2": 3,
+              "3": 3,
+              "4": 4,
+              "5": 4,
+              "6": 4,
+              "7": 4,
+              "8": 3,
+              "9": 4,
+              "10": 5,
+              "11": 5,
+              "12": 3,
+              "13": 5,
+              "14": 3,
+              "15": 3,
+              "16": 3,
+              "17": 3
+            },
+            "penalties": {
+              "penalty_18": 0,
+              "penalty_19": -1,
+              "penalty_20": 0,
+              "penalty_21": 0
+            },
+            "updated_at": "2024-11-15T10:30:00"
+          },
+          {
+            "mo_id": 2,
+            "mo_name": "Елец",
+            "leader_name": "Жабин В.П.",
+            "score_public": 50.0,
+            "score_closed": 13.0,
+            "score_penalties": -3.0,
+            "score_total": 60.0,
+            "zone": "green",
+            "indicators": {
+              "1": 3,
+              "2": 3,
+              "3": 3,
+              "4": 4,
+              "5": 4,
+              "6": 4,
+              "7": 4,
+              "8": 3,
+              "9": 4,
+              "10": 5,
+              "11": 5,
+              "12": 3,
+              "13": 5,
+              "14": 2,
+              "15": 2,
+              "16": 2,
+              "17": 2
+            },
+            "penalties": {
+              "penalty_18": 0,
+              "penalty_19": -1,
+              "penalty_20": -1,
+              "penalty_21": 0
+            },
+            "updated_at": "2024-11-15T10:30:00"
+          },
+          {
+            "mo_id": 3,
+            "mo_name": "Доб.",
+            "leader_name": "Попов А.А.",
+            "score_public": 35.0,
+            "score_closed": 8.0,
+            "score_penalties": -5.0,
+            "score_total": 38.0,
+            "zone": "yellow",
+            "indicators": {
+              "1": 3,
+              "2": 3,
+              "3": 3,
+              "4": 3,
+              "5": 3,
+              "6": 3,
+              "7": 3,
+              "8": 3,
+              "9": 2,
+              "10": 2,
+              "11": 2,
+              "12": 1,
+              "13": 1,
+              "14": 1,
+              "15": 1,
+              "16": 1,
+              "17": 1
+            },
+            "penalties": {
+              "penalty_18": 0,
+              "penalty_19": -1,
+              "penalty_20": -1,
+              "penalty_21": 0
+            },
+            "updated_at": "2024-11-15T10:30:00"
+          },
+          {
+            "mo_id": 4,
+            "mo_name": "Лебедяньск",
+            "leader_name": "Телков А.М.",
+            "score_public": 25.0,
+            "score_closed": 3.0,
+            "score_penalties": -8.0,
+            "score_total": 20.0,
+            "zone": "red",
+            "indicators": {
+              "1": 3,
+              "2": 3,
+              "3": 3,
+              "4": 3,
+              "5": 3,
+              "6": 3,
+              "7": 3,
+              "8": 3,
+              "9": 1,
+              "10": 1,
+              "11": 1,
+              "12": 1,
+              "13": 1,
+              "14": 0,
+              "15": 0,
+              "16": 0,
+              "17": 0
+            },
+            "penalties": {
+              "penalty_18": -1,
+              "penalty_19": -1,
+              "penalty_20": -1,
+              "penalty_21": 0
+            },
+            "updated_at": "2024-11-15T10:30:00"
+          }
+        ]
+      },
+      "validation_rules": [
+        "status == 'success'",
+        "total > 0",
+        "data[0].mo_id is not null",
+        "data[0].leader_name is not null",
+        "data[0].indicators is dict",
+        "data[0].penalties is dict",
+        "53 <= data[0].score_total <= 66 → data[0].zone == 'green'",
+        "29 <= data[0].score_total <= 52 → data[0].zone == 'yellow'",
+        "0 <= data[0].score_total <= 28 → data[0].zone == 'red'"
+      ]
+    },
+    {
+      "name": "Получить рейтинг, отсортированный по названию МО",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "sort": "mo_name",
+        "order": "asc",
+        "page": 1,
+        "page_size": 10
+      },
+      "validation_rules": [
+        "data[0].mo_name < data[1].mo_name (проверка сортировки по имени)"
+      ]
+    },
+    {
+      "name": "Получить рейтинг, отсортированный по публичному баллу (убывание)",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "sort": "score_public",
+        "order": "desc",
+        "page": 1,
+        "page_size": 10
+      },
+      "validation_rules": [
+        "data[0].score_public >= data[1].score_public (проверка сортировки по публичному баллу)"
+      ]
+    },
+    {
+      "name": "Получить вторую страницу (пагинация)",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "page": 2,
+        "page_size": 10
+      },
+      "validation_rules": [
+        "page == 2",
+        "len(data) <= 10"
+      ]
+    },
+    {
+      "name": "Проверить, что indicators содержит баллы за все критерии",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "page": 1,
+        "page_size": 1
+      },
+      "validation_rules": [
+        "data[0].indicators has key '1'",
+        "data[0].indicators has key '2'",
+        "...",
+        "data[0].indicators has key '17'",
+        "0 <= data[0].indicators['1'] <= 5 (баллы в диапазоне 0-5)"
+      ]
+    },
+    {
+      "name": "Проверить, что penalties содержит штрафы",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "page": 1,
+        "page_size": 1
+      },
+      "validation_rules": [
+        "data[0].penalties has key 'penalty_18'",
+        "data[0].penalties has key 'penalty_19'",
+        "data[0].penalties has key 'penalty_20'",
+        "data[0].penalties has key 'penalty_21'",
+        "data[0].penalties['penalty_18'] <= 0 (штрафы отрицательные или 0)"
+      ]
+    },
+    {
+      "name": "Проверить, что итоговый балл = публичный + закрытый + штрафы",
+      "method": "GET",
+      "endpoint": "/api/rating",
+      "params": {
+        "period": "2024-11",
+        "page": 1,
+        "page_size": 1
+      },
+      "validation_rules": [
+        "data[0].score_total == data[0].score_public + data[0].score_closed + data[0].score_penalties (проверка расчета)"
+      ]
+    }
+  ],
+
+  "curl_examples": [
+    {
+      "description": "Получить рейтинг за ноябрь 2024",
+      "command": "curl -X GET 'http://localhost:8000/api/rating?period=2024-11&sort=score_total&order=desc&page=1&page_size=10'"
+    },
+    {
+      "description": "Получить рейтинг, отсортированный по названию МО",
+      "command": "curl -X GET 'http://localhost:8000/api/rating?sort=mo_name&order=asc'"
+    },
+    {
+      "description": "Получить конкретный период и версию методики",
+      "command": "curl -X GET 'http://localhost:8000/api/rating?period=2024-10&version=1'"
+    },
+    {
+      "description": "Получить вторую страницу (пагинация)",
+      "command": "curl -X GET 'http://localhost:8000/api/rating?page=2&page_size=20'"
+    }
+  ],
+
+  "python_test_script": {
+    "description": "Пример Python скрипта для тестирования API",
+    "code": "#!/usr/bin/env python3\nimport requests\nimport json\n\nBASE_URL = 'http://localhost:8000/api'\n\n# Тест 1: Получить рейтинг\nprint('=== Тест 1: Получить рейтинг ===')\nresponse = requests.get(f'{BASE_URL}/rating', params={\n    'period': '2024-11',\n    'sort': 'score_total',\n    'page': 1,\n    'page_size': 10\n})\n\nif response.status_code == 200:\n    data = response.json()\n    print(f'✓ Статус: {data[\"status\"]}')\n    print(f'✓ Всего МО: {data[\"total\"]}')\n    print(f'✓ На странице: {len(data[\"data\"])} МО')\n    \n    # Проверить первую МО\n    mo = data['data'][0]\n    print(f'\\nПервая МО:')\n    print(f'  - Название: {mo[\"mo_name\"]}')\n    print(f'  - Глава: {mo[\"leader_name\"]}')\n    print(f'  - Итоговый балл: {mo[\"score_total\]} (зона: {mo[\"zone\"]}')\n    print(f'  - Баллы за критерии: {mo[\"indicators\"]}')\n    print(f'  - Штрафы: {mo[\"penalties\"]}')\n    \n    # Проверка расчета\n    expected_total = mo['score_public'] + mo['score_closed'] + mo['score_penalties']\n    if abs(mo['score_total'] - expected_total) < 0.01:\n        print(f'✓ Расчет итога верен')\n    else:\n        print(f'✗ Ошибка расчета итога')\nelse:\n    print(f'✗ Ошибка API: {response.status_code}')\n    print(response.text)\n\n# Тест 2: Проверить зоны\nprint('\\n=== Тест 2: Проверить зоны ===')\nfor mo in data['data'][:3]:\n    score = mo['score_total']\n    zone = mo['zone']\n    \n    if 53 <= score <= 66:\n        expected_zone = 'green'\n    elif 29 <= score <= 52:\n        expected_zone = 'yellow'\n    else:\n        expected_zone = 'red'\n    \n    if zone == expected_zone:\n        print(f'✓ {mo[\"mo_name\"]}: {score} баллов → {zone} зона')\n    else:\n        print(f'✗ {mo[\"mo_name\"]}: {score} баллов → {zone} (ожидается {expected_zone})')"
+  }
+}

@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, func as db_func
 from typing import Optional
 from datetime import datetime
 import logging
+import json
 
 from database import get_db
-from models import DimMO, FactSummary, DimPeriod
+from models import DimMO, FactSummary, DimPeriod, FactIndicator, FactPenalty, DimIndicator, DimPenalty
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,11 +31,14 @@ async def get_rating(
         query = db.query(
             DimMO.mo_id,
             DimMO.mo_name,
+            DimMO.leader_name,
             FactSummary.score_public,
             FactSummary.score_closed,
             FactSummary.score_penalties,
             FactSummary.score_total,
             FactSummary.zone,
+            FactSummary.period_id,
+            FactSummary.version_id,
             FactSummary.updated_at,
         ).join(
             FactSummary,
@@ -80,20 +84,60 @@ async def get_rating(
         offset = (page - 1) * page_size
         results = query.offset(offset).limit(page_size).all()
 
-        # Format response
-        items = [
-            {
-                "mo_id": r[0],
-                "mo_name": r[1],
-                "score_public": float(r[2]) if r[2] else 0,
-                "score_closed": float(r[3]) if r[3] else 0,
-                "score_penalties": float(r[4]) if r[4] else 0,
-                "score_total": float(r[5]) if r[5] else 0,
-                "zone": r[6],
-                "updated_at": r[7].isoformat() if r[7] else None,
+        # Get detailed scores for each indicator and penalty
+        def get_detailed_scores(mo_id, period_id, version_id):
+            # Get all indicator scores
+            indicators = db.query(
+                DimIndicator.code,
+                FactIndicator.score
+            ).join(
+                FactIndicator,
+                DimIndicator.ind_id == FactIndicator.ind_id
+            ).filter(
+                FactIndicator.mo_id == mo_id,
+                FactIndicator.period_id == period_id,
+                FactIndicator.version_id == version_id
+            ).all()
+
+            # Get all penalty scores
+            penalties = db.query(
+                DimPenalty.code,
+                FactPenalty.score_negative
+            ).join(
+                FactPenalty,
+                DimPenalty.pen_id == FactPenalty.pen_id
+            ).filter(
+                FactPenalty.mo_id == mo_id,
+                FactPenalty.period_id == period_id,
+                FactPenalty.version_id == version_id
+            ).all()
+
+            return {
+                "indicators": {ind[0]: float(ind[1]) if ind[1] else 0 for ind in indicators},
+                "penalties": {pen[0]: float(pen[1]) if pen[1] else 0 for pen in penalties}
             }
-            for r in results
-        ]
+
+        # Format response
+        items = []
+        for r in results:
+            mo_id, mo_name, leader_name = r[0], r[1], r[2]
+            period_id, version_id = r[8], r[9]
+
+            detailed_scores = get_detailed_scores(mo_id, period_id, version_id)
+
+            items.append({
+                "mo_id": mo_id,
+                "mo_name": mo_name,
+                "leader_name": leader_name or "Не указано",
+                "score_public": float(r[3]) if r[3] else 0,
+                "score_closed": float(r[4]) if r[4] else 0,
+                "score_penalties": float(r[5]) if r[5] else 0,
+                "score_total": float(r[6]) if r[6] else 0,
+                "zone": r[7],
+                "indicators": detailed_scores["indicators"],
+                "penalties": detailed_scores["penalties"],
+                "updated_at": r[10].isoformat() if r[10] else None,
+            })
 
         return {
             "status": "success",
