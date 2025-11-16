@@ -91,9 +91,108 @@ def apply_leader_name_column_migration():
             pass
 
 
+def apply_dim_indicator_columns_migration():
+    """
+    Migration: Fix dim_indicator table to include block_id and criteria_order columns
+    Recreates table to ensure all columns exist
+    """
+    try:
+        session = SessionLocal()
+
+        # Check if block_id column exists
+        inspector = inspect(engine)
+        indicator_columns = [col['name'] for col in inspector.get_columns('dim_indicator')]
+
+        if 'block_id' not in indicator_columns:
+            logger.info("🔄 Running migration: Fixing dim_indicator table structure...")
+
+            # Drop foreign key constraints
+            session.execute(text("ALTER TABLE fact_indicator DROP CONSTRAINT IF EXISTS fact_indicator_ind_id_fkey"))
+            session.execute(text("ALTER TABLE map_scale DROP CONSTRAINT IF EXISTS map_scale_ind_id_fkey"))
+            session.commit()
+
+            # Create backup
+            session.execute(text("CREATE TABLE dim_indicator_backup AS SELECT * FROM dim_indicator"))
+            session.commit()
+            logger.info("✓ Created backup of dim_indicator")
+
+            # Drop old table
+            session.execute(text("DROP TABLE IF EXISTS dim_indicator CASCADE"))
+            session.commit()
+            logger.info("✓ Dropped old dim_indicator table")
+
+            # Create new table with all columns
+            session.execute(text("""
+                CREATE TABLE dim_indicator (
+                    ind_id SERIAL PRIMARY KEY,
+                    code VARCHAR(50) NOT NULL UNIQUE,
+                    name VARCHAR(255) NOT NULL,
+                    block VARCHAR(100),
+                    block_id INTEGER,
+                    criteria_order INTEGER,
+                    description TEXT,
+                    unit VARCHAR(50),
+                    is_public BOOLEAN DEFAULT true,
+                    owner_org VARCHAR(100),
+                    weight FLOAT,
+                    min_value FLOAT,
+                    max_value FLOAT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            session.commit()
+            logger.info("✓ Created new dim_indicator table with all columns")
+
+            # Restore data from backup
+            session.execute(text("""
+                INSERT INTO dim_indicator (ind_id, code, name, block, description, unit, is_public, owner_org, weight, min_value, max_value, created_at, updated_at)
+                SELECT ind_id, code, name, block, description, unit, is_public, owner_org, weight, min_value, max_value, created_at, updated_at
+                FROM dim_indicator_backup
+            """))
+            session.commit()
+            logger.info("✓ Restored data from backup")
+
+            # Re-add foreign keys
+            session.execute(text("""
+                ALTER TABLE fact_indicator ADD CONSTRAINT fact_indicator_ind_id_fkey
+                FOREIGN KEY (ind_id) REFERENCES dim_indicator(ind_id)
+            """))
+            session.execute(text("""
+                ALTER TABLE map_scale ADD CONSTRAINT map_scale_ind_id_fkey
+                FOREIGN KEY (ind_id) REFERENCES dim_indicator(ind_id)
+            """))
+            session.commit()
+            logger.info("✓ Re-added foreign key constraints")
+
+            # Drop backup
+            session.execute(text("DROP TABLE dim_indicator_backup"))
+            session.commit()
+            logger.info("✓ Cleaned up backup table")
+
+            # Verify
+            result = session.execute(text("SELECT COUNT(*) FROM dim_indicator"))
+            count = result.scalar()
+            logger.info(f"✓ dim_indicator has {count} rows")
+
+        else:
+            logger.info("✓ Column block_id already exists in dim_indicator, skipping migration")
+
+        session.close()
+
+    except Exception as e:
+        logger.error(f"✗ dim_indicator columns migration failed: {str(e)}")
+        logger.info("⚠ App will continue, but some features may not work")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
 def apply_criteria_blocks_migration():
     """
-    Migration: Create dim_criteria_block table and add block_id columns to dim_indicator
+    Migration: Create dim_criteria_block table and populate with block structure
     """
     try:
         session = SessionLocal()
@@ -102,7 +201,6 @@ def apply_criteria_blocks_migration():
         inspector = inspect(engine)
         tables = [table.name for table in inspector.get_table_names()]
 
-        # Create dim_criteria_block table if not exists
         if 'dim_criteria_block' not in tables:
             logger.info("🔄 Running migration: Creating dim_criteria_block table...")
 
@@ -118,28 +216,6 @@ def apply_criteria_blocks_migration():
             """))
             session.commit()
             logger.info("✓ dim_criteria_block table created")
-
-        # Add missing columns to dim_indicator
-        inspector = inspect(engine)  # Refresh inspector
-        indicator_columns = [col['name'] for col in inspector.get_columns('dim_indicator')]
-
-        if 'block_id' not in indicator_columns:
-            logger.info("🔄 Running migration: Adding block_id to dim_indicator...")
-            session.execute(text("""
-                ALTER TABLE dim_indicator
-                ADD COLUMN block_id INTEGER REFERENCES dim_criteria_block(block_id)
-            """))
-            session.commit()
-            logger.info("✓ block_id column added to dim_indicator")
-
-        if 'criteria_order' not in indicator_columns:
-            logger.info("🔄 Running migration: Adding criteria_order to dim_indicator...")
-            session.execute(text("""
-                ALTER TABLE dim_indicator
-                ADD COLUMN criteria_order INTEGER
-            """))
-            session.commit()
-            logger.info("✓ criteria_order column added to dim_indicator")
 
         # Insert criteria blocks if they don't exist
         logger.info("🔄 Populating criteria blocks...")
@@ -181,8 +257,10 @@ def run_all_migrations():
     logger.info("🔧 Running database migrations...")
     logger.info("=" * 80)
 
-    apply_leader_name_column_migration()
-    apply_criteria_blocks_migration()
+    # Order matters! Fix table structure first, then add data
+    apply_dim_indicator_columns_migration()  # Fix dim_indicator table structure
+    apply_leader_name_column_migration()      # Add leader_name column and data
+    apply_criteria_blocks_migration()         # Create criteria blocks
 
     logger.info("=" * 80)
     logger.info("✓ All migrations completed")
