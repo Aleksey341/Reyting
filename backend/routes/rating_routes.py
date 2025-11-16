@@ -1,10 +1,10 @@
 """
-Simplified rating routes without detailed indicator/penalty scores.
-Use this if the detailed scores version has issues.
+Rating routes - Get ratings for municipalities.
+Handles both cases: with and without leader_name field.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, text
 from typing import Optional
 from datetime import datetime
 import logging
@@ -27,24 +27,54 @@ async def get_rating(
     db: Session = Depends(get_db),
 ):
     """
-    Get rating table with MO scores (simplified version).
+    Get rating table with MO scores.
     Supports sorting, pagination, and filtering by period/version.
+    Works with or without leader_name field.
     """
     try:
-        query = db.query(
-            DimMO.mo_id,
-            DimMO.mo_name,
-            DimMO.leader_name,
-            FactSummary.score_public,
-            FactSummary.score_closed,
-            FactSummary.score_penalties,
-            FactSummary.score_total,
-            FactSummary.zone,
-            FactSummary.updated_at,
-        ).join(
-            FactSummary,
-            and_(DimMO.mo_id == FactSummary.mo_id)
-        )
+        # Check if leader_name column exists
+        has_leader_name = False
+        try:
+            # Try to query with leader_name
+            db.execute(
+                text("SELECT leader_name FROM dim_mo LIMIT 1")
+            )
+            has_leader_name = True
+        except Exception:
+            has_leader_name = False
+            logger.warning("leader_name column does not exist, proceeding without it")
+
+        # Build query based on column availability
+        if has_leader_name:
+            query = db.query(
+                DimMO.mo_id,
+                DimMO.mo_name,
+                DimMO.leader_name,
+                FactSummary.score_public,
+                FactSummary.score_closed,
+                FactSummary.score_penalties,
+                FactSummary.score_total,
+                FactSummary.zone,
+                FactSummary.updated_at,
+            ).join(
+                FactSummary,
+                and_(DimMO.mo_id == FactSummary.mo_id)
+            )
+        else:
+            query = db.query(
+                DimMO.mo_id,
+                DimMO.mo_name,
+                text("NULL as leader_name"),
+                FactSummary.score_public,
+                FactSummary.score_closed,
+                FactSummary.score_penalties,
+                FactSummary.score_total,
+                FactSummary.zone,
+                FactSummary.updated_at,
+            ).join(
+                FactSummary,
+                and_(DimMO.mo_id == FactSummary.mo_id)
+            )
 
         if period:
             try:
@@ -95,7 +125,7 @@ async def get_rating(
         offset = (page - 1) * page_size
         results = query.offset(offset).limit(page_size).all()
 
-        # Format response (simplified - no detailed indicators/penalties)
+        # Format response
         items = []
         for r in results:
             items.append({
@@ -107,8 +137,8 @@ async def get_rating(
                 "score_penalties": float(r[5]) if r[5] else 0,
                 "score_total": float(r[6]) if r[6] else 0,
                 "zone": r[7],
-                "indicators": {},  # Empty for now
-                "penalties": {},   # Empty for now
+                "indicators": {},
+                "penalties": {},
                 "updated_at": r[8].isoformat() if r[8] else None,
             })
 
@@ -140,31 +170,58 @@ async def compare_mos(
     try:
         mo_id_list = [int(x.strip()) for x in mo_ids.split(",")]
 
-        query = db.query(
-            DimMO.mo_id,
-            DimMO.mo_name,
-            DimMO.leader_name,
-            FactSummary.score_public,
-            FactSummary.score_closed,
-            FactSummary.score_total,
-            FactSummary.zone,
-        ).join(
-            FactSummary,
-            DimMO.mo_id == FactSummary.mo_id
-        ).filter(
-            DimMO.mo_id.in_(mo_id_list)
-        )
+        # Check if leader_name exists
+        has_leader_name = False
+        try:
+            db.execute(text("SELECT leader_name FROM dim_mo LIMIT 1"))
+            has_leader_name = True
+        except Exception:
+            has_leader_name = False
+
+        if has_leader_name:
+            query = db.query(
+                DimMO.mo_id,
+                DimMO.mo_name,
+                DimMO.leader_name,
+                FactSummary.score_public,
+                FactSummary.score_closed,
+                FactSummary.score_total,
+                FactSummary.zone,
+            ).join(
+                FactSummary,
+                DimMO.mo_id == FactSummary.mo_id
+            ).filter(
+                DimMO.mo_id.in_(mo_id_list)
+            )
+        else:
+            query = db.query(
+                DimMO.mo_id,
+                DimMO.mo_name,
+                text("NULL as leader_name"),
+                FactSummary.score_public,
+                FactSummary.score_closed,
+                FactSummary.score_total,
+                FactSummary.zone,
+            ).join(
+                FactSummary,
+                DimMO.mo_id == FactSummary.mo_id
+            ).filter(
+                DimMO.mo_id.in_(mo_id_list)
+            )
 
         if period:
-            period_date = datetime.strptime(period, "%Y-%m").date()
-            period_obj = db.query(DimPeriod).filter(
-                and_(
-                    DimPeriod.date_from <= period_date,
-                    DimPeriod.date_to >= period_date,
-                )
-            ).first()
-            if period_obj:
-                query = query.filter(FactSummary.period_id == period_obj.period_id)
+            try:
+                period_date = datetime.strptime(period, "%Y-%m").date()
+                period_obj = db.query(DimPeriod).filter(
+                    and_(
+                        DimPeriod.date_from <= period_date,
+                        DimPeriod.date_to >= period_date,
+                    )
+                ).first()
+                if period_obj:
+                    query = query.filter(FactSummary.period_id == period_obj.period_id)
+            except ValueError:
+                pass
 
         results = query.all()
 
@@ -188,5 +245,5 @@ async def compare_mos(
         }
 
     except Exception as e:
-        logger.error(f"Error comparing MOs: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error comparing MOs")
+        logger.error(f"Error comparing MOs: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error comparing MOs: {str(e)}")
