@@ -41,6 +41,14 @@ except Exception as e:
     logger.warning(f"⚠ Database connection failed: {e}")
     logger.warning("⚠ App will start without database (API endpoints will not work)")
 
+# Run database migrations
+try:
+    from migrations import run_all_migrations
+    run_all_migrations()
+except Exception as e:
+    logger.warning(f"⚠ Migrations failed: {e}")
+    logger.warning("⚠ Some features may not work correctly")
+
 # Create app with /api docs path
 app = FastAPI(
     title=settings.api_title,
