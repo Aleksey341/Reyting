@@ -546,6 +546,118 @@ def implement_official_methodology():
         except:
             pass
 
+def calculate_fact_summary_from_indicators():
+    """
+    Calculate FactSummary (aggregated scores) from FactIndicator (detailed scores).
+    This populates the summary table that the API reads from.
+    """
+    logger.info("🔄 Running migration: Calculate FactSummary from FactIndicator...")
+
+    try:
+        session = SessionLocal()
+
+        # Get all unique MO, Period combinations that have data
+        result = session.execute(text("""
+            SELECT DISTINCT mo_id, period_id, COALESCE(version_id, 1) as version_id
+            FROM fact_indicator
+            WHERE score IS NOT NULL
+        """))
+
+        combinations = result.fetchall()
+        logger.info(f"  Found {len(combinations)} MO-Period combinations with data")
+
+        inserted = 0
+        for mo_id, period_id, version_id in combinations:
+            # Calculate PUBLIC score (sum of pub_* criteria)
+            public_result = session.execute(text("""
+                SELECT SUM(fi.score) as total
+                FROM fact_indicator fi
+                JOIN dim_indicator di ON fi.ind_id = di.ind_id
+                WHERE fi.mo_id = :mo_id
+                    AND fi.period_id = :period_id
+                    AND di.rating_type = 'ПУБЛИЧНЫЙ'
+            """), {"mo_id": mo_id, "period_id": period_id})
+            public_score = public_result.scalar() or 0.0
+
+            # Calculate CLOSED score (sum of closed_* criteria)
+            closed_result = session.execute(text("""
+                SELECT SUM(fi.score) as total
+                FROM fact_indicator fi
+                JOIN dim_indicator di ON fi.ind_id = di.ind_id
+                WHERE fi.mo_id = :mo_id
+                    AND fi.period_id = :period_id
+                    AND di.rating_type = 'ЗАКРЫТЫЙ'
+            """), {"mo_id": mo_id, "period_id": period_id})
+            closed_score = closed_result.scalar() or 0.0
+
+            # Calculate PENALTIES (sum of pen_* criteria - these are negative)
+            penalties_result = session.execute(text("""
+                SELECT SUM(fi.score) as total
+                FROM fact_indicator fi
+                JOIN dim_indicator di ON fi.ind_id = di.ind_id
+                WHERE fi.mo_id = :mo_id
+                    AND fi.period_id = :period_id
+                    AND di.is_penalty = true
+            """), {"mo_id": mo_id, "period_id": period_id})
+            penalties = penalties_result.scalar() or 0.0
+
+            # Calculate total (average of public and closed + penalties)
+            if public_score > 0 or closed_score > 0:
+                # If we have both public and closed, average them
+                if public_score > 0 and closed_score > 0:
+                    total_score = (public_score + closed_score) / 2 + penalties
+                # If only one type, use that
+                elif public_score > 0:
+                    total_score = public_score + penalties
+                else:
+                    total_score = closed_score + penalties
+            else:
+                total_score = 0.0
+
+            # Determine risk zone
+            if total_score >= 53:
+                zone = 'Зелёная'
+            elif total_score >= 29:
+                zone = 'Жёлтая'
+            else:
+                zone = 'Красная'
+
+            # Insert or update FactSummary
+            session.execute(text("""
+                INSERT INTO fact_summary (mo_id, period_id, version_id, score_public, score_closed, score_penalties, score_total, zone, updated_at)
+                VALUES (:mo_id, :period_id, :version_id, :score_public, :score_closed, :score_penalties, :score_total, :zone, NOW())
+                ON CONFLICT (mo_id, period_id, version_id) DO UPDATE SET
+                    score_public = :score_public,
+                    score_closed = :score_closed,
+                    score_penalties = :score_penalties,
+                    score_total = :score_total,
+                    zone = :zone,
+                    updated_at = NOW()
+            """), {
+                "mo_id": mo_id,
+                "period_id": period_id,
+                "version_id": version_id,
+                "score_public": public_score,
+                "score_closed": closed_score,
+                "score_penalties": penalties,
+                "score_total": total_score,
+                "zone": zone
+            })
+            inserted += 1
+
+        session.commit()
+        logger.info(f"  ✓ Calculated and inserted {inserted} FactSummary records")
+        session.close()
+
+    except Exception as e:
+        logger.error(f"✗ Calculate FactSummary migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
 def run_all_migrations():
     """Run all database migrations on startup"""
     logger.info("=" * 80)
@@ -559,6 +671,7 @@ def run_all_migrations():
     ensure_proper_indicator_codes()             # Ensure indicators have proper codes (pm_*, ca_*, etc)
     fix_fact_indicator_scores()                 # Fix NULL scores in fact_indicator
     implement_official_methodology()                 # Implement official methodology
+    calculate_fact_summary_from_indicators()    # Calculate summary scores from indicators
 
     logger.info("=" * 80)
     logger.info("✓ All migrations completed")
