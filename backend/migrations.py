@@ -432,12 +432,27 @@ def implement_official_methodology():
             pass
         session.commit()
         
+        # First, update existing indicators with rating_type if they don't have it
+        session.execute(text("""
+            UPDATE dim_indicator SET rating_type = 'ПУБЛИЧНЫЙ'
+            WHERE code LIKE 'pub_%' AND rating_type IS NULL
+        """))
+        session.execute(text("""
+            UPDATE dim_indicator SET rating_type = 'ЗАКРЫТЫЙ'
+            WHERE code LIKE 'closed_%' AND rating_type IS NULL
+        """))
+        session.execute(text("""
+            UPDATE dim_indicator SET is_penalty = TRUE
+            WHERE code LIKE 'pen_%' AND is_penalty = FALSE
+        """))
+        session.commit()
+
         official_count = session.query(DimIndicator).filter(
             DimIndicator.code.in_(['pub_1','pub_2','pub_3','pub_4','pub_5','pub_6','pub_7','pub_8','pub_9',
                 'closed_1','closed_2','closed_3','closed_4','closed_5','closed_6','closed_7','closed_8',
                 'pen_1','pen_2','pen_3'])
         ).count()
-        
+
         if official_count < 16:
             logger.info("Creating official 16 criteria...")
             public_criteria = [
