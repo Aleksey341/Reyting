@@ -465,7 +465,7 @@ async def check_database_status(db: Session = Depends(get_db)):
 async def run_migrations(db: Session = Depends(get_db)):
     """
     Manually trigger database migrations.
-    This specifically runs implement_official_methodology() to create the 16 official criteria.
+    This runs both implement_official_methodology() and calculate_fact_summary_from_indicators().
     """
     try:
         logger.info("🔄 Manually running implement_official_methodology() migration...")
@@ -478,7 +478,13 @@ async def run_migrations(db: Session = Depends(get_db)):
 
         total_official = pub_count + closed_count + pen_count
 
-        logger.info(f"✅ Migration completed. Created criteria: {total_official}")
+        logger.info(f"✅ Criteria migration completed. Created criteria: {total_official}")
+
+        # Now run aggregation migration
+        logger.info("🔄 Running calculate_fact_summary_from_indicators() migration...")
+        from migrations import calculate_fact_summary_from_indicators
+        calculate_fact_summary_from_indicators()
+        logger.info("✅ Aggregation migration completed.")
 
         return {
             "status": "success",
