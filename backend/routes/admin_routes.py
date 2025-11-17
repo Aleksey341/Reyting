@@ -410,15 +410,19 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
         db.commit()
         logger.info(f"  ✅ Inserted {inserted_count} indicator records")
 
+        # Immediately run aggregation migration after loading data
+        logger.info("🔄 Running aggregation migration to calculate fact_summary...")
+        from migrations import calculate_fact_summary_from_indicators
+        calculate_fact_summary_from_indicators()
+        logger.info("✅ Aggregation completed")
+
         return {
             "status": "success",
             "message": "Official methodology data loaded successfully!",
             "inserted_records": inserted_count,
             "next_steps": [
-                "1. Restart the application so migrations run",
-                "2. Migration calculate_fact_summary_from_indicators() will populate fact_summary",
-                "3. Hard refresh Rating tab (Ctrl+F5)",
-                "4. Scores should display instead of zeros"
+                "1. Hard refresh Rating tab (Ctrl+F5)",
+                "2. Scores should display instead of zeros"
             ]
         }
 
