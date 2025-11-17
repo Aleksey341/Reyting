@@ -261,7 +261,16 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
         from models import DimMethodology
         methodology = db.query(DimMethodology).first()
         if not methodology:
-            raise Exception("No methodology found in database")
+            # Create default methodology if not exists
+            methodology = DimMethodology(
+                version="Official v1",
+                valid_from="2024-01-01",
+                notes="Official methodology with 16 criteria"
+            )
+            db.add(methodology)
+            db.commit()
+            db.refresh(methodology)
+            logger.info(f"Created methodology (ID: {methodology.version_id})")
         version_id = methodology.version_id
 
         # Get official indicators and municipality data
