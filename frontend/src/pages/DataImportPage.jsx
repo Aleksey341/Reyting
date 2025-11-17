@@ -46,10 +46,18 @@ export default function DataImportPage() {
 
     const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
-    // Choose endpoint based on import type
-    const endpoint = importType === 'official'
-      ? `${apiUrl}/import/official-methodology?period_month=${period}`
-      : `${apiUrl}/import/csv?period_month=${period}`;
+    // Determine file type and endpoint
+    const fileName = fileItem.file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
+    let endpoint;
+    if (importType === 'official') {
+      endpoint = isExcel
+        ? `${apiUrl}/import/official-methodology-excel?period_month=${period}`
+        : `${apiUrl}/import/official-methodology?period_month=${period}`;
+    } else {
+      endpoint = `${apiUrl}/import/csv?period_month=${period}`;
+    }
 
     try {
       const response = await axios.post(endpoint, formData, {
@@ -246,11 +254,11 @@ export default function DataImportPage() {
           {/* File selector */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              CSV файлы
+              {importType === 'official' ? 'CSV или Excel файлы' : 'CSV файлы'}
             </label>
             <input
               type="file"
-              accept=".csv"
+              accept={importType === 'official' ? '.csv,.xlsx,.xls' : '.csv'}
               multiple
               onChange={handleFileChange}
               disabled={uploading}
@@ -264,7 +272,9 @@ export default function DataImportPage() {
                 cursor-pointer"
             />
             <p className="mt-1 text-sm text-gray-500">
-              Можно выбрать несколько файлов. Формат: CSV с колонками "Муниципалитет" и показателями
+              {importType === 'official'
+                ? 'Можно выбрать несколько файлов. Форматы: CSV, Excel (.xlsx). Колонки: "Муниципалитет" и официальные коды критериев (pub_1, pub_2, ... closed_1, ... pen_1, etc.)'
+                : 'Можно выбрать несколько файлов. Формат: CSV с колонками "Муниципалитет" и показателями'}
             </p>
           </div>
 

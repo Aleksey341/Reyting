@@ -213,6 +213,216 @@ async def import_official_methodology_csv(
         raise HTTPException(status_code=500, detail=f"Error importing CSV: {str(e)}")
 
 
+@router.post("/official-methodology-excel")
+async def import_official_methodology_excel(
+    file: UploadFile = File(...),
+    period_month: str = "2024-01",
+    db: Session = Depends(get_db),
+):
+    """
+    Import Excel file with official methodology indicator data.
+
+    Expected Excel format:
+    - First column: Муниципалитет (Municipality name)
+    - Columns: pub_1, pub_2, pub_3, pub_4, pub_5, pub_6, pub_7, pub_8, pub_9
+               closed_1, closed_2, closed_3, closed_4, closed_5, closed_6, closed_7, closed_8
+               pen_1, pen_2, pen_3
+
+    Can also have any other columns with indicator names - they will be matched to official codes.
+
+    Parameters:
+    - file: Excel file to upload (.xlsx)
+    - period_month: Period in YYYY-MM format (default: 2024-01)
+    """
+    try:
+        # Read Excel file
+        content = await file.read()
+        df = pd.read_excel(io.BytesIO(content), sheet_name=0)
+
+        logger.info(f"Excel uploaded: {len(df)} rows, {len(df.columns)} columns")
+        logger.info(f"Target period: {period_month}")
+        logger.info(f"Columns: {list(df.columns)}")
+
+        # Parse period_month
+        from datetime import datetime, timedelta
+        period_date = datetime.strptime(period_month, "%Y-%m")
+
+        # Calculate last day of month
+        if period_date.month == 12:
+            period_end = period_date.replace(day=31)
+        else:
+            next_month = period_date.replace(month=period_date.month + 1, day=1)
+            period_end = next_month - timedelta(days=1)
+
+        date_from = period_date.strftime("%Y-%m-%d")
+        date_to = period_end.strftime("%Y-%m-%d")
+
+        # Ensure official methodology exists
+        logger.info("Ensuring official methodology exists...")
+        from migrations import implement_official_methodology
+        implement_official_methodology()
+
+        # Get or create official methodology version
+        methodology = db.query(DimMethodology).first()
+        if not methodology:
+            methodology = DimMethodology(
+                version="Official v1",
+                valid_from="2024-01-01",
+                notes="Official methodology with 16 criteria"
+            )
+            db.add(methodology)
+            db.commit()
+            db.refresh(methodology)
+            logger.info(f"Created official methodology (ID: {methodology.version_id})")
+
+        # Get or create period
+        period = db.query(DimPeriod).filter(
+            DimPeriod.date_from == date_from
+        ).first()
+
+        if not period:
+            period = DimPeriod(
+                period_type="month",
+                date_from=date_from,
+                date_to=date_to,
+                edg_flag=False
+            )
+            db.add(period)
+            db.commit()
+            db.refresh(period)
+            logger.info(f"Created period {period_month} (ID: {period.period_id})")
+
+        # Official indicator codes
+        official_indicators = [
+            'pub_1', 'pub_2', 'pub_3', 'pub_4', 'pub_5', 'pub_6', 'pub_7', 'pub_8', 'pub_9',
+            'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_6', 'closed_7', 'closed_8',
+            'pen_1', 'pen_2', 'pen_3'
+        ]
+
+        # Load data
+        values_loaded = 0
+        rows_processed = 0
+
+        for idx, row in df.iterrows():
+            # Try to find municipality name in various column names
+            mo_name = None
+            for col in df.columns:
+                col_lower = str(col).lower()
+                if 'муниципалитет' in col_lower or 'municipality' in col_lower or 'mo' in col_lower:
+                    mo_name = row.get(col)
+                    break
+
+            if pd.isna(mo_name) or mo_name == '':
+                continue
+
+            rows_processed += 1
+
+            # Find MO by name
+            mo = db.query(DimMO).filter(
+                text("mo_name ILIKE :name")
+            ).params(name=f"%{mo_name}%").first()
+
+            if not mo:
+                logger.warning(f"Municipality not found: {mo_name}")
+                continue
+
+            # Load official indicators - try both code format and any numeric values
+            for col in df.columns:
+                col_str = str(col).strip()
+
+                # Check if column name matches official indicator code
+                matched_code = None
+                for official_code in official_indicators:
+                    if col_str == official_code or col_str.lower() == official_code:
+                        matched_code = official_code
+                        break
+
+                if not matched_code:
+                    # Try to match by column name containing criterion name
+                    continue
+
+                value = row.get(col)
+                if pd.isna(value) or value == '':
+                    continue
+
+                # Find indicator
+                indicator = db.query(DimIndicator).filter(
+                    DimIndicator.code == matched_code
+                ).first()
+
+                if not indicator:
+                    logger.warning(f"Indicator not found: {matched_code}")
+                    continue
+
+                # Convert value to float
+                try:
+                    if isinstance(value, str):
+                        value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
+                        try:
+                            value_float = float(value_clean)
+                        except:
+                            value_float = 0.0
+                    else:
+                        value_float = float(value)
+                except:
+                    value_float = 0.0
+
+                # Check if exists
+                existing = db.query(FactIndicator).filter(
+                    FactIndicator.mo_id == mo.mo_id,
+                    FactIndicator.period_id == period.period_id,
+                    FactIndicator.ind_id == indicator.ind_id,
+                    FactIndicator.version_id == methodology.version_id
+                ).first()
+
+                if existing:
+                    existing.score = value_float
+                else:
+                    fact = FactIndicator(
+                        mo_id=mo.mo_id,
+                        period_id=period.period_id,
+                        ind_id=indicator.ind_id,
+                        version_id=methodology.version_id,
+                        score=value_float,
+                    )
+                    db.add(fact)
+
+                values_loaded += 1
+
+        db.commit()
+        logger.info(f"Loaded {values_loaded} indicator values from {rows_processed} rows")
+
+        # Automatically calculate aggregated scores
+        logger.info(f"Auto-calculating aggregated scores for period {period.period_id}...")
+        try:
+            from migrations import calculate_fact_summary_from_indicators
+            calculate_fact_summary_from_indicators()
+            logger.info("✓ Aggregated scores calculated successfully")
+        except Exception as e:
+            logger.error(f"Error calculating aggregated scores: {e}")
+
+        return {
+            "status": "success",
+            "message": "Official methodology data imported from Excel successfully!",
+            "statistics": {
+                "rows_processed": rows_processed,
+                "values_loaded": values_loaded,
+                "period": period_month,
+                "period_id": period.period_id,
+                "methodology": "Official 16 criteria"
+            },
+            "next_steps": [
+                "1. Hard refresh Rating tab (Ctrl+F5)",
+                "2. Scores should display with proper aggregation"
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error importing official methodology Excel: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error importing Excel: {str(e)}")
+
+
 @router.get("/official-methodology-template")
 async def get_official_methodology_template(db: Session = Depends(get_db)):
     """
