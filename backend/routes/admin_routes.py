@@ -195,6 +195,50 @@ async def get_leader_names_template():
     }
 
 
+@router.post("/cleanup-old-data")
+async def cleanup_old_data(db: Session = Depends(get_db)):
+    """
+    Clean up old indicator data to prepare for official methodology.
+
+    Removes:
+    - All old fact_indicator records (1400+)
+    - Old indicators with codes like pm_*, ca_*, dev_* (keeping only pub_*, closed_*, pen_*)
+
+    This allows fresh loading of official methodology data.
+    """
+    try:
+        logger.info("🔄 Cleaning up old data...")
+
+        # Delete all fact_indicator records
+        fact_count = db.query(FactIndicator).delete()
+        logger.info(f"  ✓ Deleted {fact_count} fact_indicator records")
+
+        # Delete old indicators (keep only official ones)
+        old_indicators = db.query(DimIndicator).filter(
+            ~DimIndicator.code.in_([
+                'pub_1', 'pub_2', 'pub_3', 'pub_4', 'pub_5', 'pub_6', 'pub_7', 'pub_8', 'pub_9',
+                'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_6', 'closed_7', 'closed_8',
+                'pen_1', 'pen_2', 'pen_3'
+            ])
+        ).delete()
+        logger.info(f"  ✓ Deleted {old_indicators} old indicators")
+
+        db.commit()
+
+        return {
+            "status": "success",
+            "message": "Old data cleaned up successfully!",
+            "deleted_fact_indicators": fact_count,
+            "deleted_old_indicators": old_indicators,
+            "next_step": "Now call /api/admin/load-official-methodology-data to load new data"
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error cleaning up data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
 @router.post("/load-official-methodology-data")
 async def load_official_methodology_data(db: Session = Depends(get_db)):
     """
