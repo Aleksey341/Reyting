@@ -222,13 +222,9 @@ async def import_official_methodology_excel(
     """
     Import Excel file with official methodology indicator data.
 
-    Expected Excel format:
-    - First column: Муниципалитет (Municipality name)
-    - Columns: pub_1, pub_2, pub_3, pub_4, pub_5, pub_6, pub_7, pub_8, pub_9
-               closed_1, closed_2, closed_3, closed_4, closed_5, closed_6, closed_7, closed_8
-               pen_1, pen_2, pen_3
-
-    Can also have any other columns with indicator names - they will be matched to official codes.
+    Supports two formats:
+    1. Single sheet with columns: Муниципалитет, pub_1, pub_2, ... closed_1, ... pen_1, etc.
+    2. Multiple sheets (one per criterion) with Муниципалитет and values
 
     Parameters:
     - file: Excel file to upload (.xlsx)
@@ -237,11 +233,11 @@ async def import_official_methodology_excel(
     try:
         # Read Excel file
         content = await file.read()
-        df = pd.read_excel(io.BytesIO(content), sheet_name=0)
 
-        logger.info(f"Excel uploaded: {len(df)} rows, {len(df.columns)} columns")
-        logger.info(f"Target period: {period_month}")
-        logger.info(f"Columns: {list(df.columns)}")
+        # Get all sheet names
+        xls = pd.ExcelFile(io.BytesIO(content))
+        sheet_names = xls.sheet_names
+        logger.info(f"Excel file has {len(sheet_names)} sheets: {sheet_names}")
 
         # Parse period_month
         from datetime import datetime, timedelta
@@ -299,105 +295,219 @@ async def import_official_methodology_excel(
             'pen_1', 'pen_2', 'pen_3'
         ]
 
-        # Load data
+        # Check if first sheet contains municipality column
+        df_first = pd.read_excel(io.BytesIO(content), sheet_name=sheet_names[0])
+        has_municipality_col = any('муниципалитет' in str(col).lower() for col in df_first.columns)
+
         values_loaded = 0
-        rows_processed = 0
+        total_rows_processed = 0
 
-        for idx, row in df.iterrows():
-            # Try to find municipality name in various column names
-            mo_name = None
-            for col in df.columns:
-                col_lower = str(col).lower()
-                if 'муниципалитет' in col_lower or 'municipality' in col_lower or 'mo' in col_lower:
-                    mo_name = row.get(col)
-                    break
+        # **Format 2**: Multiple sheets - one per criterion
+        if len(sheet_names) > 1 and not has_municipality_col:
+            logger.info("Detected Format 2: Multiple sheets (one per criterion)")
 
-            if pd.isna(mo_name) or mo_name == '':
-                continue
-
-            rows_processed += 1
-
-            # Find MO by name
-            mo = db.query(DimMO).filter(
-                text("mo_name ILIKE :name")
-            ).params(name=f"%{mo_name}%").first()
-
-            if not mo:
-                logger.warning(f"Municipality not found: {mo_name}")
-                continue
-
-            # Load official indicators - try both code format and any numeric values
-            for col in df.columns:
-                col_str = str(col).strip()
-
-                # Check if column name matches official indicator code
-                matched_code = None
-                for official_code in official_indicators:
-                    if col_str == official_code or col_str.lower() == official_code:
-                        matched_code = official_code
+            # Build mapping from sheet name to official code
+            sheet_to_code = {}
+            for sheet_name in sheet_names:
+                for code in official_indicators:
+                    if code.lower() in sheet_name.lower() or code in sheet_name:
+                        sheet_to_code[sheet_name] = code
                         break
 
-                if not matched_code:
-                    # Try to match by column name containing criterion name
+            logger.info(f"Sheet to code mapping: {sheet_to_code}")
+
+            # Process each sheet as a separate criterion
+            for sheet_name in sheet_names:
+                if sheet_name not in sheet_to_code:
+                    logger.info(f"Skipping sheet '{sheet_name}' - no matching criterion code")
                     continue
 
-                value = row.get(col)
-                if pd.isna(value) or value == '':
+                indicator_code = sheet_to_code[sheet_name]
+                logger.info(f"Processing sheet '{sheet_name}' as criterion '{indicator_code}'")
+
+                df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name)
+                logger.info(f"Sheet '{sheet_name}': {df.shape} - columns: {list(df.columns)}")
+
+                # Find municipality column
+                mo_col_name = None
+                for col in df.columns:
+                    if 'муниципалитет' in str(col).lower():
+                        mo_col_name = col
+                        break
+
+                if not mo_col_name:
+                    logger.warning(f"No municipality column found in sheet '{sheet_name}'")
                     continue
 
-                # Find indicator
+                # Find value column (usually second column or numeric column)
+                value_col_name = None
+                for col in df.columns:
+                    if col != mo_col_name:
+                        # Check if column contains numeric values
+                        try:
+                            sample = pd.to_numeric(df[col].dropna().head(1), errors='coerce')
+                            if not sample.isna().all():
+                                value_col_name = col
+                                break
+                        except:
+                            pass
+
+                if not value_col_name:
+                    logger.warning(f"No numeric column found in sheet '{sheet_name}'")
+                    continue
+
+                logger.info(f"Using columns: MO='{mo_col_name}', Value='{value_col_name}'")
+
+                # Get or create indicator
                 indicator = db.query(DimIndicator).filter(
-                    DimIndicator.code == matched_code
+                    DimIndicator.code == indicator_code
                 ).first()
 
                 if not indicator:
-                    logger.warning(f"Indicator not found: {matched_code}")
+                    logger.warning(f"Indicator {indicator_code} not found in database")
                     continue
 
-                # Convert value to float
-                try:
-                    if isinstance(value, str):
-                        value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
-                        try:
+                # Load data from this sheet
+                for idx, row in df.iterrows():
+                    mo_name = row.get(mo_col_name)
+                    if pd.isna(mo_name) or mo_name == '':
+                        continue
+
+                    total_rows_processed += 1
+
+                    # Find MO
+                    mo = db.query(DimMO).filter(
+                        text("mo_name ILIKE :name")
+                    ).params(name=f"%{mo_name}%").first()
+
+                    if not mo:
+                        logger.warning(f"Municipality '{mo_name}' not found")
+                        continue
+
+                    # Get value
+                    value = row.get(value_col_name)
+                    if pd.isna(value) or value == '':
+                        continue
+
+                    # Convert to float
+                    try:
+                        if isinstance(value, str):
+                            value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
                             value_float = float(value_clean)
-                        except:
-                            value_float = 0.0
+                        else:
+                            value_float = float(value)
+                    except:
+                        logger.warning(f"Could not convert value '{value}' to float")
+                        continue
+
+                    # Insert or update
+                    existing = db.query(FactIndicator).filter(
+                        FactIndicator.mo_id == mo.mo_id,
+                        FactIndicator.period_id == period.period_id,
+                        FactIndicator.ind_id == indicator.ind_id,
+                        FactIndicator.version_id == methodology.version_id
+                    ).first()
+
+                    if existing:
+                        existing.score = value_float
                     else:
-                        value_float = float(value)
-                except:
-                    value_float = 0.0
+                        fact = FactIndicator(
+                            mo_id=mo.mo_id,
+                            period_id=period.period_id,
+                            ind_id=indicator.ind_id,
+                            version_id=methodology.version_id,
+                            score=value_float,
+                        )
+                        db.add(fact)
 
-                # Check if exists
-                existing = db.query(FactIndicator).filter(
-                    FactIndicator.mo_id == mo.mo_id,
-                    FactIndicator.period_id == period.period_id,
-                    FactIndicator.ind_id == indicator.ind_id,
-                    FactIndicator.version_id == methodology.version_id
-                ).first()
+                    values_loaded += 1
 
-                if existing:
-                    existing.score = value_float
-                else:
-                    fact = FactIndicator(
-                        mo_id=mo.mo_id,
-                        period_id=period.period_id,
-                        ind_id=indicator.ind_id,
-                        version_id=methodology.version_id,
-                        score=value_float,
-                    )
-                    db.add(fact)
+        # **Format 1**: Single sheet with all columns
+        else:
+            logger.info("Detected Format 1: Single sheet with all columns")
+            df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_names[0])
 
-                values_loaded += 1
+            for idx, row in df.iterrows():
+                mo_name = None
+                for col in df.columns:
+                    if 'муниципалитет' in str(col).lower():
+                        mo_name = row.get(col)
+                        break
+
+                if pd.isna(mo_name) or mo_name == '':
+                    continue
+
+                total_rows_processed += 1
+
+                mo = db.query(DimMO).filter(
+                    text("mo_name ILIKE :name")
+                ).params(name=f"%{mo_name}%").first()
+
+                if not mo:
+                    continue
+
+                for col in df.columns:
+                    col_str = str(col).strip()
+
+                    matched_code = None
+                    for official_code in official_indicators:
+                        if col_str == official_code or col_str.lower() == official_code:
+                            matched_code = official_code
+                            break
+
+                    if not matched_code:
+                        continue
+
+                    value = row.get(col)
+                    if pd.isna(value) or value == '':
+                        continue
+
+                    indicator = db.query(DimIndicator).filter(
+                        DimIndicator.code == matched_code
+                    ).first()
+
+                    if not indicator:
+                        continue
+
+                    try:
+                        if isinstance(value, str):
+                            value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
+                            value_float = float(value_clean)
+                        else:
+                            value_float = float(value)
+                    except:
+                        continue
+
+                    existing = db.query(FactIndicator).filter(
+                        FactIndicator.mo_id == mo.mo_id,
+                        FactIndicator.period_id == period.period_id,
+                        FactIndicator.ind_id == indicator.ind_id,
+                        FactIndicator.version_id == methodology.version_id
+                    ).first()
+
+                    if existing:
+                        existing.score = value_float
+                    else:
+                        fact = FactIndicator(
+                            mo_id=mo.mo_id,
+                            period_id=period.period_id,
+                            ind_id=indicator.ind_id,
+                            version_id=methodology.version_id,
+                            score=value_float,
+                        )
+                        db.add(fact)
+
+                    values_loaded += 1
 
         db.commit()
-        logger.info(f"Loaded {values_loaded} indicator values from {rows_processed} rows")
+        logger.info(f"Loaded {values_loaded} indicator values from {total_rows_processed} rows")
 
         # Automatically calculate aggregated scores
         logger.info(f"Auto-calculating aggregated scores for period {period.period_id}...")
         try:
             from migrations import calculate_fact_summary_from_indicators
             calculate_fact_summary_from_indicators()
-            logger.info("✓ Aggregated scores calculated successfully")
+            logger.info("Aggregated scores calculated successfully")
         except Exception as e:
             logger.error(f"Error calculating aggregated scores: {e}")
 
@@ -405,7 +515,8 @@ async def import_official_methodology_excel(
             "status": "success",
             "message": "Official methodology data imported from Excel successfully!",
             "statistics": {
-                "rows_processed": rows_processed,
+                "sheets_processed": len([s for s in sheet_names if s in sheet_to_code]) if not has_municipality_col else 1,
+                "rows_processed": total_rows_processed,
                 "values_loaded": values_loaded,
                 "period": period_month,
                 "period_id": period.period_id,
@@ -419,6 +530,8 @@ async def import_official_methodology_excel(
 
     except Exception as e:
         logger.error(f"Error importing official methodology Excel: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error importing Excel: {str(e)}")
 
