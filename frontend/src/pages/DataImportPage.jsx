@@ -6,6 +6,7 @@ export default function DataImportPage() {
   const [period, setPeriod] = useState('2024-01');
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState([]);
+  const [importType, setImportType] = useState('official'); // 'official' or 'csv'
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
@@ -45,28 +46,29 @@ export default function DataImportPage() {
 
     const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
+    // Choose endpoint based on import type
+    const endpoint = importType === 'official'
+      ? `${apiUrl}/import/official-methodology?period_month=${period}`
+      : `${apiUrl}/import/csv?period_month=${period}`;
+
     try {
-      const response = await axios.post(
-        `${apiUrl}/import/csv?period_month=${period}`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === fileItem.id
-                  ? { ...f, progress: percentCompleted }
-                  : f
-              )
-            );
-          },
-        }
-      );
+      const response = await axios.post(endpoint, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileItem.id
+                ? { ...f, progress: percentCompleted }
+                : f
+            )
+          );
+        },
+      });
 
       return { success: true, data: response.data };
     } catch (err) {
@@ -184,6 +186,46 @@ export default function DataImportPage() {
         </h2>
 
         <div className="space-y-6">
+          {/* Import type selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Тип импорта
+            </label>
+            <div className="flex gap-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  value="official"
+                  checked={importType === 'official'}
+                  onChange={(e) => setImportType(e.target.value)}
+                  disabled={uploading}
+                  className="w-4 h-4 mr-2"
+                />
+                <span className="text-sm text-gray-700">
+                  Официальная методология (16 критериев)
+                </span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  value="csv"
+                  checked={importType === 'csv'}
+                  onChange={(e) => setImportType(e.target.value)}
+                  disabled={uploading}
+                  className="w-4 h-4 mr-2"
+                />
+                <span className="text-sm text-gray-700">
+                  Пользовательские показатели
+                </span>
+              </label>
+            </div>
+            <p className="mt-2 text-sm text-gray-500">
+              {importType === 'official'
+                ? 'Загрузите CSV с данными по 16 официальным критериям. Баллы будут автоматически рассчитаны.'
+                : 'Загрузите CSV с пользовательскими показателями (старый формат).'}
+            </p>
+          </div>
+
           {/* Period selector */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
