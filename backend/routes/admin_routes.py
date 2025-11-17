@@ -12,7 +12,7 @@ from database import get_db
 from models import DimMO, DimIndicator, FactIndicator, DimPeriod, DimMethodology
 from migrations import implement_official_methodology
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
