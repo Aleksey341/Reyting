@@ -306,13 +306,48 @@ async def import_official_methodology_excel(
         if len(sheet_names) > 1 and not has_municipality_col:
             logger.info("Detected Format 2: Multiple sheets (one per criterion)")
 
+            # Mapping from criterion name (sheet name) to official code
+            # This maps the Russian criterion names to official codes
+            criterion_name_to_code = {
+                # PUBLIC CRITERIA (pub_1 to pub_9)
+                "Оценка поддержки руководства об": "pub_1",  # Поддержка руководства области
+                "Выполнение задач АГП": "pub_2",  # Выполнение задач АГП
+                "Позиционирование главы МО": "pub_3",
+                "Проектная деятельность": "pub_4",
+                "Вовлеченность молодежи _Доброво": "pub_5",  # Молодежь в добровольчестве
+                "Вовлеченность молодежи _Движени": "pub_6",  # Молодежь в Движении Первых
+                "Личная работа главы с ветеранам": "pub_7",  # Работа с ветеранами СВО
+                "Кадровый управленческий резерв": "pub_8",
+                "Работа с грантами": "pub_9",
+
+                # CLOSED CRITERIA (closed_1 to closed_8)
+                "Партийная принадлежность сотруд": "closed_1",  # Партийное мнение в администрации
+                "Распределение мандатов": "closed_2",  # Альтернативное мнение в органе
+                "Показатели АГП _Уровень_": "closed_3",
+                "Показатели АГП _Качество_": "closed_4",
+                "Экономическая привлекательность": "closed_5",
+                "Личная работа главы с ветеранам": "closed_6",  # Работа с ветеранами СВО (закрытая)
+                "Партийная принадлежность ветера": "closed_7",  # Политическая деятельность ветеранов
+                "Участие в проекте _Гордость Лип": "closed_8",  # Проект Гордость Липецкой земли
+
+                # PENALTY CRITERIA (pen_1 to pen_3)
+                "Конфликты с региональной власть": "pen_1",
+                "Внутримуниципальные конфликты": "pen_2",
+                "Данные правоохранительных орган": "pen_3",
+            }
+
             # Build mapping from sheet name to official code
             sheet_to_code = {}
             for sheet_name in sheet_names:
-                for code in official_indicators:
-                    if code.lower() in sheet_name.lower() or code in sheet_name:
-                        sheet_to_code[sheet_name] = code
-                        break
+                # Try exact match first
+                if sheet_name in criterion_name_to_code:
+                    sheet_to_code[sheet_name] = criterion_name_to_code[sheet_name]
+                else:
+                    # Try partial match
+                    for criterion_name, code in criterion_name_to_code.items():
+                        if criterion_name.lower() in sheet_name.lower() or sheet_name.lower() in criterion_name.lower():
+                            sheet_to_code[sheet_name] = code
+                            break
 
             logger.info(f"Sheet to code mapping: {sheet_to_code}")
 
