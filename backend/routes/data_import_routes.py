@@ -16,6 +16,247 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+@router.post("/official-methodology")
+async def import_official_methodology_csv(
+    file: UploadFile = File(...),
+    period_month: str = "2024-01",
+    db: Session = Depends(get_db),
+):
+    """
+    Import CSV file with official methodology indicator data.
+
+    Expected CSV format:
+    - First column: Муниципалитет (Municipality name)
+    - Columns: pub_1, pub_2, pub_3, pub_4, pub_5, pub_6, pub_7, pub_8, pub_9
+               closed_1, closed_2, closed_3, closed_4, closed_5, closed_6, closed_7, closed_8
+               pen_1, pen_2, pen_3
+
+    Example row:
+    Липецк, 3, 5, 3, 3, 3, 3, 3, 3, 3, 6, 4, 5, 5, 3, 3, 6, 2, -3, -3, -5
+
+    Parameters:
+    - file: CSV file to upload
+    - period_month: Period in YYYY-MM format (default: 2024-01)
+    """
+    try:
+        # Read CSV file
+        content = await file.read()
+        df = pd.read_csv(io.BytesIO(content), encoding='utf-8')
+
+        logger.info(f"CSV uploaded: {len(df)} rows, {len(df.columns)} columns")
+        logger.info(f"Target period: {period_month}")
+        logger.info(f"Columns: {list(df.columns)}")
+
+        # Parse period_month
+        from datetime import datetime, timedelta
+        period_date = datetime.strptime(period_month, "%Y-%m")
+
+        # Calculate last day of month
+        if period_date.month == 12:
+            period_end = period_date.replace(day=31)
+        else:
+            next_month = period_date.replace(month=period_date.month + 1, day=1)
+            period_end = next_month - timedelta(days=1)
+
+        date_from = period_date.strftime("%Y-%m-%d")
+        date_to = period_end.strftime("%Y-%m-%d")
+
+        # Ensure official methodology exists
+        logger.info("Ensuring official methodology exists...")
+        from migrations import implement_official_methodology
+        implement_official_methodology()
+
+        # Get or create official methodology version
+        methodology = db.query(DimMethodology).first()
+        if not methodology:
+            methodology = DimMethodology(
+                version="Official v1",
+                valid_from="2024-01-01",
+                notes="Official methodology with 16 criteria"
+            )
+            db.add(methodology)
+            db.commit()
+            db.refresh(methodology)
+            logger.info(f"Created official methodology (ID: {methodology.version_id})")
+
+        # Get or create period
+        period = db.query(DimPeriod).filter(
+            DimPeriod.date_from == date_from
+        ).first()
+
+        if not period:
+            period = DimPeriod(
+                period_type="month",
+                date_from=date_from,
+                date_to=date_to,
+                edg_flag=False
+            )
+            db.add(period)
+            db.commit()
+            db.refresh(period)
+            logger.info(f"Created period {period_month} (ID: {period.period_id})")
+
+        # Official indicator codes
+        official_indicators = [
+            'pub_1', 'pub_2', 'pub_3', 'pub_4', 'pub_5', 'pub_6', 'pub_7', 'pub_8', 'pub_9',
+            'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_6', 'closed_7', 'closed_8',
+            'pen_1', 'pen_2', 'pen_3'
+        ]
+
+        # Load data
+        values_loaded = 0
+        errors = 0
+        rows_processed = 0
+
+        for _, row in df.iterrows():
+            mo_name = row.get('Муниципалитет') or row.get('municipalitet') or row.get('mo_name')
+
+            if pd.isna(mo_name) or mo_name == '':
+                continue
+
+            rows_processed += 1
+
+            # Find MO by name
+            mo = db.query(DimMO).filter(
+                text("mo_name ILIKE :name")
+            ).params(name=f"%{mo_name}%").first()
+
+            if not mo:
+                logger.warning(f"Municipality not found: {mo_name}")
+                continue
+
+            # Load official indicators
+            for ind_code in official_indicators:
+                # Check if column exists in CSV
+                if ind_code not in row:
+                    continue
+
+                value = row[ind_code]
+                if pd.isna(value) or value == '':
+                    continue
+
+                # Find indicator
+                indicator = db.query(DimIndicator).filter(
+                    DimIndicator.code == ind_code
+                ).first()
+
+                if not indicator:
+                    logger.warning(f"Indicator not found: {ind_code}")
+                    continue
+
+                # Convert value to float
+                try:
+                    if isinstance(value, str):
+                        value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
+                        try:
+                            value_float = float(value_clean)
+                        except:
+                            value_float = 0.0
+                    else:
+                        value_float = float(value)
+                except:
+                    value_float = 0.0
+
+                # Check if exists
+                existing = db.query(FactIndicator).filter(
+                    FactIndicator.mo_id == mo.mo_id,
+                    FactIndicator.period_id == period.period_id,
+                    FactIndicator.ind_id == indicator.ind_id,
+                    FactIndicator.version_id == methodology.version_id
+                ).first()
+
+                if existing:
+                    existing.score = value_float
+                else:
+                    fact = FactIndicator(
+                        mo_id=mo.mo_id,
+                        period_id=period.period_id,
+                        ind_id=indicator.ind_id,
+                        version_id=methodology.version_id,
+                        score=value_float,
+                    )
+                    db.add(fact)
+
+                values_loaded += 1
+
+        db.commit()
+        logger.info(f"Loaded {values_loaded} indicator values from {rows_processed} rows")
+
+        # Automatically calculate aggregated scores
+        logger.info(f"Auto-calculating aggregated scores for period {period.period_id}...")
+        try:
+            from migrations import calculate_fact_summary_from_indicators
+            calculate_fact_summary_from_indicators()
+            logger.info("✓ Aggregated scores calculated successfully")
+        except Exception as e:
+            logger.error(f"Error calculating aggregated scores: {e}")
+
+        return {
+            "status": "success",
+            "message": "Official methodology data imported successfully!",
+            "statistics": {
+                "rows_processed": rows_processed,
+                "values_loaded": values_loaded,
+                "period": period_month,
+                "period_id": period.period_id,
+                "methodology": "Official 16 criteria"
+            },
+            "next_steps": [
+                "1. Hard refresh Rating tab (Ctrl+F5)",
+                "2. Scores should display with proper aggregation"
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error importing official methodology CSV: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error importing CSV: {str(e)}")
+
+
+@router.get("/official-methodology-template")
+async def get_official_methodology_template(db: Session = Depends(get_db)):
+    """
+    Get CSV template for official methodology data import.
+
+    Returns a CSV with municipality names and official indicator column headers.
+    """
+    try:
+        # Get all municipalities
+        municipalities = db.query(DimMO).all()
+
+        # Official indicator codes
+        official_indicators = [
+            'pub_1', 'pub_2', 'pub_3', 'pub_4', 'pub_5', 'pub_6', 'pub_7', 'pub_8', 'pub_9',
+            'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_6', 'closed_7', 'closed_8',
+            'pen_1', 'pen_2', 'pen_3'
+        ]
+
+        # Build CSV header
+        header = "Муниципалитет," + ",".join(official_indicators)
+
+        # Build CSV rows with municipality names
+        rows = [header]
+        for mo in municipalities:
+            rows.append(mo.mo_name + "," + ",".join([""] * len(official_indicators)))
+
+        csv_content = "\n".join(rows)
+
+        return {
+            "status": "success",
+            "content": csv_content,
+            "instructions": {
+                "format": "CSV with UTF-8 encoding",
+                "columns": official_indicators,
+                "example": "Липецк,3,5,3,3,3,3,3,3,3,6,4,5,5,3,3,6,2,-3,-3,-5",
+                "note": "All 20 municipalities are pre-filled. Just add scores."
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
 @router.post("/csv")
 async def import_csv(
     file: UploadFile = File(...),
