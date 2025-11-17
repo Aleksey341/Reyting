@@ -257,6 +257,13 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
         period_id = 1  # Default period
         inserted_count = 0
 
+        # Get version_id from DimMethodology (required for FactIndicator)
+        from models import DimMethodology
+        methodology = db.query(DimMethodology).first()
+        if not methodology:
+            raise Exception("No methodology found in database")
+        version_id = methodology.version_id
+
         # Get official indicators and municipality data
         pub_indicators = db.query(DimIndicator).filter(
             DimIndicator.rating_type == 'ПУБЛИЧНЫЙ'
@@ -276,6 +283,7 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
         logger.info(f"  Found {len(closed_indicators)} CLOSED indicators")
         logger.info(f"  Found {len(penalty_indicators)} PENALTY indicators")
         logger.info(f"  Found {len(municipalities)} municipalities")
+        logger.info(f"  Using version_id: {version_id}")
 
         # Data for all municipalities (from CSV analysis)
         municipality_data = {
@@ -370,6 +378,7 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
                         mo_id=mo.mo_id,
                         ind_id=indicator.ind_id,
                         period_id=period_id,
+                        version_id=version_id,
                         score=score,
                     )
                     db.add(fact)
