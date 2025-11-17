@@ -254,11 +254,25 @@ async def load_official_methodology_data(db: Session = Depends(get_db)):
     try:
         logger.info("🔄 Loading official methodology data...")
 
-        period_id = 1  # Default period
         inserted_count = 0
 
+        # Get or create DimPeriod
+        from models import DimMethodology, DimPeriod
+        period = db.query(DimPeriod).first()
+        if not period:
+            period = DimPeriod(
+                period_type="month",
+                date_from="2024-01-01",
+                date_to="2024-01-31",
+                edg_flag=False
+            )
+            db.add(period)
+            db.commit()
+            db.refresh(period)
+            logger.info(f"Created period (ID: {period.period_id})")
+        period_id = period.period_id
+
         # Get version_id from DimMethodology (required for FactIndicator)
-        from models import DimMethodology
         methodology = db.query(DimMethodology).first()
         if not methodology:
             # Create default methodology if not exists
