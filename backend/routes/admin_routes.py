@@ -10,6 +10,7 @@ import logging
 
 from database import get_db
 from models import DimMO, DimIndicator, FactIndicator, DimPeriod, DimMethodology
+from migrations import implement_official_methodology
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -425,4 +426,39 @@ async def check_database_status(db: Session = Depends(get_db)):
 
     except Exception as e:
         logger.error(f"Error checking database status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.post("/run-migrations")
+async def run_migrations(db: Session = Depends(get_db)):
+    """
+    Manually trigger database migrations.
+    This specifically runs implement_official_methodology() to create the 16 official criteria.
+    """
+    try:
+        logger.info("🔄 Manually running implement_official_methodology() migration...")
+        implement_official_methodology()
+
+        # Check how many official criteria were created
+        pub_count = db.query(DimIndicator).filter(DimIndicator.code.like('pub_%')).count()
+        closed_count = db.query(DimIndicator).filter(DimIndicator.code.like('closed_%')).count()
+        pen_count = db.query(DimIndicator).filter(DimIndicator.code.like('pen_%')).count()
+
+        total_official = pub_count + closed_count + pen_count
+
+        logger.info(f"✅ Migration completed. Created criteria: {total_official}")
+
+        return {
+            "status": "success",
+            "message": "Migrations executed successfully!",
+            "criteria_created": {
+                "public": pub_count,
+                "closed": closed_count,
+                "penalties": pen_count,
+                "total": total_official
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error running migrations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
