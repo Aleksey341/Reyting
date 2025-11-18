@@ -551,18 +551,12 @@ def calculate_fact_summary_from_indicators():
             """), {"mo_id": mo_id, "period_id": period_id})
             penalties = penalties_result.scalar() or 0.0
 
-            # Calculate total (average of public and closed + penalties)
-            if public_score > 0 or closed_score > 0:
-                # If we have both public and closed, average them
-                if public_score > 0 and closed_score > 0:
-                    total_score = (public_score + closed_score) / 2 + penalties
-                # If only one type, use that
-                elif public_score > 0:
-                    total_score = public_score + penalties
-                else:
-                    total_score = closed_score + penalties
-            else:
-                total_score = 0.0
+            # Calculate total score: simply add public + closed + penalties
+            # No averaging! Direct sum of all three components
+            total_score = public_score + closed_score + penalties
+
+            # Ensure score doesn't go below 0 (penalties can make it negative, but we cap at 0)
+            total_score = max(0.0, total_score)
 
             # Determine risk zone
             if total_score >= 53:
