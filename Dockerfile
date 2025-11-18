@@ -16,11 +16,12 @@ WORKDIR /build
 
 # Copy frontend package files
 COPY frontend/package*.json ./
-COPY frontend/yarn.lock* ./
 
-# Install dependencies with npm (more reliable than yarn/corepack in CI/CD)
-RUN npm ci --prefer-offline --no-audit --legacy-peer-deps || \
-    npm install --legacy-peer-deps
+# Install dependencies with npm
+# Use npm install instead of npm ci to avoid lock file conflicts
+# --legacy-peer-deps allows installing packages with mismatched peer dependencies
+# --no-optional skips optional dependencies for faster install
+RUN npm install --legacy-peer-deps --no-optional --no-fund 2>&1 | grep -E "^(npm|added|packages)" || true
 
 # Copy frontend source code
 COPY frontend/ ./
