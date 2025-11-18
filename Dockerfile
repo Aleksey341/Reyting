@@ -39,7 +39,7 @@ RUN npm cache clean --force && \
     (echo "Tier 4 failed, attempting Tier 5 (skip all validation)..." && \
      npm cache clean --force && \
      npm config set strict-ssl false && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=120000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline --ignore-engines 2>&1 || echo "npm install returned error, continuing with cached packages...") && \
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=120000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline --ignore-engines 2>&1 || true)) && \
     test -f node_modules/vite/package.json || (echo "ERROR: vite not found after all tiers!" && exit 1)
 
 # Copy frontend source code
