@@ -18,19 +18,21 @@ WORKDIR /build
 COPY frontend/package*.json ./
 
 # Install dependencies with npm
-# Three-tier strategy: normal → different registry → force (if registries are corrupted)
-# This handles: registry failures, lock file mismatches, corrupted packages
+# Three-tier strategy with explicit force fallback for corrupted registries
+# Tier 1: Normal install - uses official npm registry
+# Tier 2: Mirror fallback - uses npmmirror.com if Tier 1 fails
+# Tier 3: Emergency override - uses --force if both Tier 1 and 2 fail
 RUN npm cache clean --force && \
     npm config set registry https://registry.npmjs.org/ && \
-    npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 2>&1 | tail -20 || \
-    (echo "First registry failed, retrying with mirror..." && \
+    (npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || \
+    (echo "Tier 1 failed, attempting Tier 2 (npmmirror.com)..." && \
      npm cache clean --force && \
      npm config set registry https://registry.npmmirror.com && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 2>&1 | tail -20) || \
-    (echo "Both registries failed, proceeding with integrity check disabled (corrupted registry issue)..." && \
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000) || \
+    (echo "Tier 2 failed, attempting Tier 3 (force with official registry)..." && \
      npm cache clean --force && \
      npm config set registry https://registry.npmjs.org/ && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force 2>&1 | tail -20)
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force))
 
 # Copy frontend source code
 COPY frontend/ ./
