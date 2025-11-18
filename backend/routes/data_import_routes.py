@@ -11,6 +11,7 @@ import json
 
 from database import get_db
 from models import DimMO, DimPeriod, DimIndicator, DimMethodology, FactIndicator
+from indicator_scoring import IndicatorScorer
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -590,25 +591,28 @@ async def import_official_methodology_excel(
                         logger.warning(f"Municipality '{mo_name}' not found")
                         continue
 
-                    # Get value
-                    value = row.get(value_col_name)
-                    if pd.isna(value) or value == '':
-                        continue
+                    # Get value (use entire row for multi-column scoring)
+                    # Use IndicatorScorer for official methodology
+                    value_float = IndicatorScorer.score_indicator(indicator_code, df.iloc[idx])
 
-                    # First try numeric conversion
-                    value_float = None
-                    try:
-                        if isinstance(value, str):
-                            value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
-                            value_float = float(value_clean)
-                        else:
-                            value_float = float(value)
-                    except:
-                        # If numeric conversion fails, try text-based scoring rules
-                        value_float = convert_text_to_score(sheet_name, value_col_name, value, row)
-                        if value_float is None:
-                            logger.warning(f"Could not convert value '{value}' in sheet '{sheet_name}' column '{value_col_name}'")
+                    if value_float is None:
+                        # Fallback: try direct numeric conversion for simple cases
+                        value = row.get(value_col_name)
+                        if pd.isna(value) or value == '':
                             continue
+
+                        try:
+                            if isinstance(value, str):
+                                value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
+                                value_float = float(value_clean)
+                            else:
+                                value_float = float(value)
+                        except:
+                            logger.warning(f"Could not score {indicator_code} in sheet '{sheet_name}' for MO '{mo_name}'")
+                            continue
+                    else:
+                        # Successfully scored, continue
+                        pass
 
                     # Insert or update
                     existing = db.query(FactIndicator).filter(
