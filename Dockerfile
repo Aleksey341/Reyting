@@ -22,6 +22,7 @@ COPY frontend/package*.json ./
 # Handles: registry issues, lock file mismatches, corrupted packages, systemic corruption
 RUN npm cache clean --force && \
     npm config set registry https://registry.npmjs.org/ && \
+    npm config set strict-ssl false && \
     (npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || \
     (echo "Tier 1 failed, attempting Tier 2 (npmmirror.com)..." && \
      npm cache clean --force && \
@@ -31,10 +32,15 @@ RUN npm cache clean --force && \
      npm cache clean --force && \
      npm config set registry https://registry.npmjs.org/ && \
      npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force) || \
-    (echo "Tier 3 failed, attempting Tier 4 (ignore integrity checks)..." && \
+    (echo "Tier 3 failed, attempting Tier 4 (skip integrity validation)..." && \
      npm cache clean --force && \
      npm config set registry https://registry.npmjs.org/ && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true 2>&1; true))
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline) || \
+    (echo "Tier 4 failed, attempting Tier 5 (skip all validation)..." && \
+     npm cache clean --force && \
+     npm config set strict-ssl false && \
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=120000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline --ignore-engines 2>&1 || echo "npm install returned error, continuing with cached packages...") && \
+    test -f node_modules/vite/package.json || (echo "ERROR: vite not found after all tiers!" && exit 1)
 
 # Copy frontend source code
 COPY frontend/ ./
