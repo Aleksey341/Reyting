@@ -365,7 +365,9 @@ async def import_official_methodology_excel(
         # Get all sheet names
         xls = pd.ExcelFile(io.BytesIO(content))
         sheet_names = xls.sheet_names
-        logger.info(f"🔹 Excel file has {len(sheet_names)} sheets: {sheet_names}")
+        logger.info(f"Excel file has {len(sheet_names)} sheets")
+        for i, sn in enumerate(sheet_names):
+            logger.info(f"  Sheet {i+1}: '{sn}'")
 
         # Debug: Return sheet info immediately
         if not sheet_names:
@@ -501,14 +503,21 @@ async def import_official_methodology_excel(
                 # Try exact match first
                 if sheet_name in criterion_name_to_code:
                     sheet_to_code[sheet_name] = criterion_name_to_code[sheet_name]
+                    logger.info(f"Sheet '{sheet_name}' -> {criterion_name_to_code[sheet_name]} (exact match)")
                 else:
                     # Try partial match
+                    matched = False
                     for criterion_name, code in criterion_name_to_code.items():
                         if criterion_name.lower() in sheet_name.lower() or sheet_name.lower() in criterion_name.lower():
                             sheet_to_code[sheet_name] = code
+                            logger.info(f"Sheet '{sheet_name}' -> {code} (partial match: '{criterion_name}')")
+                            matched = True
                             break
 
-            logger.info(f"Sheet to code mapping: {sheet_to_code}")
+                    if not matched:
+                        logger.warning(f"Sheet '{sheet_name}' -> NO MATCH")
+
+            logger.info(f"Final sheet to code mapping: {sheet_to_code}")
 
             # Process each sheet as a separate criterion
             for sheet_name in sheet_names:
@@ -593,26 +602,15 @@ async def import_official_methodology_excel(
 
                     # Get value (use entire row for multi-column scoring)
                     # Use IndicatorScorer for official methodology
+                    logger.debug(f"Scoring {indicator_code} for {mo_name}, row has columns: {list(df.columns)}")
                     value_float = IndicatorScorer.score_indicator(indicator_code, df.iloc[idx])
 
                     if value_float is None:
-                        # Fallback: try direct numeric conversion for simple cases
-                        value = row.get(value_col_name)
-                        if pd.isna(value) or value == '':
-                            continue
+                        logger.warning(f"IndicatorScorer returned None for {indicator_code} in sheet '{sheet_name}', skipping this indicator for {mo_name}")
+                        continue
 
-                        try:
-                            if isinstance(value, str):
-                                value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
-                                value_float = float(value_clean)
-                            else:
-                                value_float = float(value)
-                        except:
-                            logger.warning(f"Could not score {indicator_code} in sheet '{sheet_name}' for MO '{mo_name}'")
-                            continue
-                    else:
-                        # Successfully scored, continue
-                        pass
+                    # Successfully scored with IndicatorScorer
+                    logger.info(f"Successfully scored {indicator_code}={value_float} for {mo_name}")
 
                     # Insert or update
                     existing = db.query(FactIndicator).filter(

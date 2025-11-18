@@ -59,11 +59,18 @@ class IndicatorScorer:
         score = 0.0
 
         # Identify columns for pub_1 (3 да/нет questions)
+        # Skip municipality and head name columns
+        skip_cols = ['муниципалитет', 'глава', 'мо', 'fio', 'name']
         da_net_cols = [col for col in row.index
-                      if isinstance(row[col], str) and row[col].strip().lower() in ['да', 'нет']]
+                      if col.lower() not in skip_cols
+                      and pd.notna(row[col])
+                      and isinstance(row[col], str)
+                      and row[col].strip().lower() in ['да', 'нет']]
+
+        logger.debug(f"pub_1: Found {len(da_net_cols)} да/нет columns: {da_net_cols}")
 
         if len(da_net_cols) < 3:
-            logger.warning(f"pub_1: Found only {len(da_net_cols)} да/нет columns, expected 3")
+            logger.debug(f"pub_1: Not enough да/нет columns ({len(da_net_cols)}), expected 3")
             return None
 
         # Take first 3 да/нет columns (in order they appear)
@@ -72,6 +79,7 @@ class IndicatorScorer:
                 value = str(row[col]).strip().lower()
                 score += 1.0 if value == 'да' else 0.0
 
+        logger.debug(f"pub_1: Calculated score = {score}")
         return min(score, 3.0)
 
     @staticmethod
@@ -582,14 +590,17 @@ class IndicatorScorer:
             return None
 
         try:
+            logger.debug(f"Scoring {indicator_code}, row columns: {list(row.index)}")
             score = scoring_func(row, {})
 
             if score is not None:
-                logger.debug(f"{indicator_code}: score = {score}")
+                logger.info(f"{indicator_code}: score = {score}")
             else:
-                logger.debug(f"{indicator_code}: could not calculate score")
+                logger.debug(f"{indicator_code}: could not calculate score (returned None)")
 
             return score
         except Exception as e:
             logger.error(f"Error scoring {indicator_code}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
