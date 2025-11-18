@@ -18,29 +18,23 @@ WORKDIR /build
 COPY frontend/package*.json ./
 
 # Install dependencies with npm
-# Four-tier strategy: normal → mirror → force → override-validation
-# Handles: registry issues, lock file mismatches, corrupted packages, systemic corruption
+# Three-tier strategy: normal → mirror → force (with scripts enabled for optional deps)
+# Handles: registry issues, lock file mismatches, network errors
+# IMPORTANT: Do NOT use --ignore-scripts or --no-optional as they prevent rollup native binaries from being built
 RUN npm cache clean --force && \
     npm config set registry https://registry.npmjs.org/ && \
     npm config set strict-ssl false && \
-    (npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || \
+    (npm install --legacy-peer-deps --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || \
     (echo "Tier 1 failed, attempting Tier 2 (npmmirror.com)..." && \
      npm cache clean --force && \
      npm config set registry https://registry.npmmirror.com && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000) || \
-    (echo "Tier 2 failed, attempting Tier 3 (force install)..." && \
+     npm install --legacy-peer-deps --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000) || \
+    (echo "Tier 2 failed, attempting Tier 3 (force install with npm registry)..." && \
      npm cache clean --force && \
      npm config set registry https://registry.npmjs.org/ && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force) || \
-    (echo "Tier 3 failed, attempting Tier 4 (skip integrity validation)..." && \
-     npm cache clean --force && \
-     npm config set registry https://registry.npmjs.org/ && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline) || \
-    (echo "Tier 4 failed, attempting Tier 5 (skip all validation)..." && \
-     npm cache clean --force && \
-     npm config set strict-ssl false && \
-     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=120000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --ignore-scripts=true --prefer-offline --ignore-engines 2>&1 || true)) && \
-    test -f node_modules/vite/package.json || (echo "ERROR: vite not found after all tiers!" && exit 1)
+     npm install --legacy-peer-deps --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --force --audit=false --prefer-offline 2>&1 || true)) && \
+    test -f node_modules/vite/package.json || (echo "ERROR: vite not found after all tiers!" && exit 1) && \
+    test -f node_modules/rollup/dist/native.js && (test -f node_modules/@rollup/rollup-linux-x64-musl/rollup.wasm || echo "⚠ Note: @rollup/rollup-linux-x64-musl will be built during vite build")
 
 # Copy frontend source code
 COPY frontend/ ./
