@@ -339,14 +339,15 @@ async def import_official_methodology_excel(
 
             # Mapping from criterion name (sheet name) to official code
             # This maps the Russian criterion names to official codes
+            # Updated to match actual sheet names from Excel file with parentheses instead of underscores
             criterion_name_to_code = {
                 # PUBLIC CRITERIA (pub_1 to pub_9)
                 "Оценка поддержки руководства об": "pub_1",  # Поддержка руководства области
                 "Выполнение задач АГП": "pub_2",  # Выполнение задач АГП
                 "Позиционирование главы МО": "pub_3",
                 "Проектная деятельность": "pub_4",
-                "Вовлеченность молодежи _Доброво": "pub_5",  # Молодежь в добровольчестве
-                "Вовлеченность молодежи _Движени": "pub_6",  # Молодежь в Движении Первых
+                "Вовлеченность молодежи (Доброво": "pub_5",  # Молодежь в добровольчестве (Добровольчество)
+                "Вовлеченность молодежи (Движени": "pub_6",  # Молодежь в Движении Первых
                 "Личная работа главы с ветеранам": "pub_7",  # Работа с ветеранами СВО
                 "Кадровый управленческий резерв": "pub_8",
                 "Работа с грантами": "pub_9",
@@ -354,12 +355,12 @@ async def import_official_methodology_excel(
                 # CLOSED CRITERIA (closed_1 to closed_8)
                 "Партийная принадлежность сотруд": "closed_1",  # Партийное мнение в администрации
                 "Распределение мандатов": "closed_2",  # Альтернативное мнение в органе
-                "Показатели АГП _Уровень_": "closed_3",
-                "Показатели АГП _Качество_": "closed_4",
+                "Показатели АГП (Уровень)": "closed_3",  # Changed from underscore to parentheses
+                "Показатели АГП (Качество)": "closed_4",  # Changed from underscore to parentheses
                 "Экономическая привлекательность": "closed_5",
                 "Личная работа главы с ветеранам": "closed_6",  # Работа с ветеранами СВО (закрытая)
                 "Партийная принадлежность ветера": "closed_7",  # Политическая деятельность ветеранов
-                "Участие в проекте _Гордость Лип": "closed_8",  # Проект Гордость Липецкой земли
+                "Участие в проекте «Гордость Лип": "closed_8",  # Проект Гордость Липецкой земли (changed quotes)
 
                 # PENALTY CRITERIA (pen_1 to pen_3)
                 "Конфликты с региональной власть": "pen_1",
@@ -407,20 +408,33 @@ async def import_official_methodology_excel(
 
                 # Find value column (usually second column or numeric column)
                 value_col_name = None
+
+                # Try to find a numeric column by checking a larger sample
                 for col in df.columns:
-                    if col != mo_col_name:
-                        # Check if column contains numeric values
+                    if col != mo_col_name and 'глава' not in str(col).lower():  # Skip "Глава МО" column
+                        # Check if column contains numeric values by testing multiple rows
                         try:
-                            sample = pd.to_numeric(df[col].dropna().head(1), errors='coerce')
-                            if not sample.isna().all():
+                            sample = pd.to_numeric(df[col].dropna().head(10), errors='coerce')
+                            numeric_count = sample.notna().sum()
+                            total_count = len(sample)
+
+                            # If at least 50% of values are numeric, use this column
+                            if total_count > 0 and numeric_count / total_count >= 0.5:
                                 value_col_name = col
+                                logger.debug(f"Found numeric column '{col}' with {numeric_count}/{total_count} numeric values")
                                 break
                         except:
                             pass
 
+                # If still no numeric column found, use the second non-municipality column
                 if not value_col_name:
-                    logger.warning(f"No numeric column found in sheet '{sheet_name}'")
-                    continue
+                    non_mo_cols = [col for col in df.columns if col != mo_col_name and 'глава' not in str(col).lower()]
+                    if non_mo_cols:
+                        value_col_name = non_mo_cols[0]
+                        logger.info(f"No purely numeric column found, using first available column: '{value_col_name}'")
+                    else:
+                        logger.warning(f"No suitable value column found in sheet '{sheet_name}'")
+                        continue
 
                 logger.info(f"Using columns: MO='{mo_col_name}', Value='{value_col_name}'")
 
