@@ -308,15 +308,32 @@ async def import_official_methodology_excel(
             'pen_1', 'pen_2', 'pen_3'
         ]
 
-        # Check if first sheet contains municipality column
-        df_first = pd.read_excel(io.BytesIO(content), sheet_name=sheet_names[0])
-        has_municipality_col = any('муниципалитет' in str(col).lower() for col in df_first.columns)
+        # Determine format: Check if we have multiple sheets AND can identify criterion codes
+        # Format 2: Multiple sheets (one per criterion) - usually 16+ sheets with criterion names
+        # Format 1: Single sheet with all columns
 
         values_loaded = 0
         total_rows_processed = 0
 
+        # For multi-sheet format, check if sheets match criterion names
+        has_multiple_sheets = len(sheet_names) > 1
+
+        # Try to detect if this is multi-sheet format by checking sheet names
+        is_multisheet_format = False
+        if has_multiple_sheets:
+            # Check if sheet names contain known criterion keywords
+            criterion_keywords = [
+                'выполнение', 'позиционирование', 'проектная', 'молодежи', 'ветеран',
+                'кадровый', 'гранты', 'партийная', 'мандатов', 'показатели', 'экономическ',
+                'конфликты', 'правоохранительных'
+            ]
+            matching_sheets = sum(1 for sheet in sheet_names
+                                if any(kw in sheet.lower() for kw in criterion_keywords))
+            is_multisheet_format = matching_sheets >= 10  # If 10+ sheets have criterion names
+            logger.info(f"🔹 Multi-sheet detection: {matching_sheets}/{len(sheet_names)} sheets match criterion names")
+
         # **Format 2**: Multiple sheets - one per criterion
-        if len(sheet_names) > 1 and not has_municipality_col:
+        if is_multisheet_format:
             logger.info("Detected Format 2: Multiple sheets (one per criterion)")
 
             # Mapping from criterion name (sheet name) to official code
@@ -473,6 +490,8 @@ async def import_official_methodology_excel(
         # **Format 1**: Single sheet with all columns
         else:
             logger.info("Detected Format 1: Single sheet with all columns")
+            if has_multiple_sheets:
+                logger.warning(f"⚠️ Multiple sheets detected but not identified as multi-sheet format. Using Format 1 fallback on first sheet only.")
             df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_names[0])
 
             for idx, row in df.iterrows():
