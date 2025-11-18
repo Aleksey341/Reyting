@@ -16,6 +16,114 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def convert_text_to_score(sheet_name: str, column_name: str, value: str, row: dict) -> float:
+    """
+    Convert text values to numeric scores based on sheet-specific rules.
+    Each sheet has different scoring logic.
+    """
+    if not isinstance(value, str):
+        return None
+
+    value_clean = value.strip().lower()
+
+    # Данные правоохранительных органов (pen_3)
+    if 'правоохранительных' in sheet_name.lower():
+        if 'возбуждения уголовного дела' in column_name.lower():
+            return -5.0 if value_clean == 'да' else 1.0
+        elif 'проверок силовых структур' in column_name.lower():
+            return -2.0 if value_clean == 'да' else 1.0
+        elif 'публикаций в смм' in column_name.lower() or 'публикаций в СМИ' in column_name.lower():
+            return -1.0 if value_clean == 'да' else 1.0
+        return 0.0
+
+    # Внутримуниципальные конфликты (pen_2)
+    if 'внутримуниципальные конфликты' in sheet_name.lower():
+        if 'значительного публичного конфликта' in column_name.lower():
+            return -2.0 if value_clean == 'да' else 1.0
+        elif 'количество случаев конфликтов' in column_name.lower():
+            # Try to parse as number
+            try:
+                count = int(float(value_clean))
+                if count >= 1 and 'квартал' in column_name.lower():
+                    return -3.0
+                elif count >= 1:
+                    return -2.0
+                else:
+                    return 1.0
+            except:
+                return -2.0 if value_clean in ['от 1 и более', '1 и более'] else 1.0
+        return 0.0
+
+    # Конфликты с региональной властью (pen_1)
+    if 'конфликты с региональной' in sheet_name.lower():
+        if 'публичного конфликта' in column_name.lower():
+            return -3.0 if value_clean == 'да' else 1.0
+        elif 'конфликта с профильным' in column_name.lower():
+            return -2.0 if value_clean == 'да' else 1.0
+        return 0.0
+
+    # Работа с грантами (pub_9)
+    if 'грантами' in sheet_name.lower():
+        if 'нарушений' in column_name.lower():
+            return 0.0 if value_clean == 'да' else 1.0
+        return 0.0
+
+    # Экономическая привлекательность (closed_5)
+    if 'экономическая привлекательность' in sheet_name.lower():
+        if 'уровень привлекательности' in column_name.lower():
+            if value_clean == 'высокая':
+                return 3.0
+            elif value_clean == 'средняя':
+                return 2.0
+            elif value_clean in ['слабая', 'низкая']:
+                return 1.0
+        return 0.0
+
+    # Показатели АГП (Качество) (closed_4)
+    if 'показатели агп' in sheet_name.lower() and 'качество' in sheet_name.lower():
+        if 'качеству' in column_name.lower():
+            if value_clean == 'превышает':
+                return 5.0
+            elif value_clean == 'достигнут':
+                return 3.0
+            elif value_clean == 'не достигнут':
+                return 0.0
+        return 0.0
+
+    # Показатели АГП (Уровень) (closed_3)
+    if 'показатели агп' in sheet_name.lower() and 'уровень' in sheet_name.lower():
+        if 'уровню' in column_name.lower():
+            if value_clean == 'превысил':
+                return 5.0
+            elif value_clean == 'выполнен':
+                return 3.0
+            elif value_clean == 'не выполнен':
+                return 0.0
+        return 0.0
+
+    # Позиционирование главы МО (pub_3)
+    if 'позиционирование' in sheet_name.lower():
+        if 'тип позиционирования' in column_name.lower():
+            if 'функционер' in value_clean or 'хозяйственник' in value_clean:
+                return 3.0
+            elif 'размытое' in value_clean or 'некачественное' in value_clean:
+                return 0.0
+        return 0.0
+
+    # Оценка поддержки руководства об (pub_1)
+    if 'оценка поддержки' in sheet_name.lower():
+        if 'публичной поддержки' in column_name.lower():
+            return 3.0 if value_clean == 'да' else 0.0
+        elif 'заместителем губернатора' in column_name.lower():
+            return 2.0 if value_clean == 'да' else 0.0
+        elif 'ключевых руководителей' in column_name.lower():
+            return 1.0 if value_clean == 'да' else 0.0
+        return 0.0
+
+    # Default: return None to skip this value
+    return None
+
+
 @router.post("/official-methodology")
 async def import_official_methodology_csv(
     file: UploadFile = File(...),
@@ -469,7 +577,8 @@ async def import_official_methodology_excel(
                     if pd.isna(value) or value == '':
                         continue
 
-                    # Convert to float
+                    # First try numeric conversion
+                    value_float = None
                     try:
                         if isinstance(value, str):
                             value_clean = value.replace('%', '').replace(' ', '').replace(',', '.')
@@ -477,8 +586,11 @@ async def import_official_methodology_excel(
                         else:
                             value_float = float(value)
                     except:
-                        logger.warning(f"Could not convert value '{value}' to float")
-                        continue
+                        # If numeric conversion fails, try text-based scoring rules
+                        value_float = convert_text_to_score(sheet_name, value_col_name, value, row)
+                        if value_float is None:
+                            logger.warning(f"Could not convert value '{value}' in sheet '{sheet_name}' column '{value_col_name}'")
+                            continue
 
                     # Insert or update
                     existing = db.query(FactIndicator).filter(
