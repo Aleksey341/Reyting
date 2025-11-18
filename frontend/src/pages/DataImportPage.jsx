@@ -52,9 +52,8 @@ export default function DataImportPage() {
 
     let endpoint;
     if (importType === 'official') {
-      endpoint = isExcel
-        ? `${apiUrl}/import/official-methodology-excel?period_month=${period}`
-        : `${apiUrl}/import/official-methodology?period_month=${period}`;
+      // Use unified endpoint for both CSV and Excel
+      endpoint = `${apiUrl}/data-import/import-official-methodology?period_month=${period}`;
     } else {
       endpoint = `${apiUrl}/import/csv?period_month=${period}`;
     }
