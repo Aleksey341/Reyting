@@ -314,6 +314,7 @@ async def import_official_methodology_excel(
 
         values_loaded = 0
         total_rows_processed = 0
+        sheet_to_code = {}  # Initialize mapping outside the if block
 
         # For multi-sheet format, check if sheets match criterion names
         has_multiple_sheets = len(sheet_names) > 1
@@ -578,17 +579,21 @@ async def import_official_methodology_excel(
         except Exception as e:
             logger.error(f"Error calculating aggregated scores: {e}")
 
+        # Calculate how many sheets were actually processed
+        sheets_processed = len([s for s in sheet_names if s in sheet_to_code]) if is_multisheet_format else 1
+
         return {
             "status": "success",
             "message": "Official methodology data imported from Excel successfully!",
             "statistics": {
-                "sheets_processed": len([s for s in sheet_names if s in sheet_to_code]) if not has_municipality_col else 1,
+                "sheets_processed": sheets_processed,
                 "rows_processed": total_rows_processed,
                 "values_loaded": values_loaded,
                 "period": period_month,
                 "period_id": period.period_id,
                 "methodology": "Official 16 criteria",
-                "total_sheets": len(sheet_names)
+                "total_sheets": len(sheet_names),
+                "format_detected": "Multi-sheet (Format 2)" if is_multisheet_format else "Single-sheet (Format 1)"
             },
             "next_steps": [
                 "1. Hard refresh Rating tab (Ctrl+F5)",
