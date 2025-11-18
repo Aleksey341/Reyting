@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Indicator Scoring Logic
+Indicator Scoring Logic - Simplified Version
 
 Converts raw Excel data into numeric scores for each official methodology indicator.
-Handles different data types: numeric, categorical, and multi-column aggregation.
+Uses a simpler, more robust approach that doesn't depend on exact column names.
 """
 
 import pandas as pd
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,573 +16,440 @@ logger = logging.getLogger(__name__)
 class IndicatorScorer:
     """Calculates indicator scores based on official methodology rules."""
 
-    # Mapping from sheet name to indicator code
-    SHEET_TO_CODE = {
-        # PUBLIC CRITERIA (pub_1 to pub_9)
-        "Оценка поддержки руководства об": "pub_1",
-        "Выполнение задач АГП": "pub_2",
-        "Позиционирование главы МО": "pub_3",
-        "Проектная деятельность": "pub_4",
-        "Вовлеченность молодежи (Доброво": "pub_5",
-        "Вовлеченность молодежи (Движени": "pub_6",
-        "Личная работа главы с ветеранам": "pub_7",
-        "Кадровый управленческий резерв": "pub_8",
-        "Работа с грантами": "pub_9",
-
-        # CLOSED CRITERIA (closed_1 to closed_8)
-        "Партийная принадлежность сотруд": "closed_1",
-        "Распределение мандатов": "closed_2",
-        "Показатели АГП (Уровень)": "closed_3",
-        "Показатели АГП (Качество)": "closed_4",
-        "Экономическая привлекательность": "closed_5",
-        "Партийная принадлежность ветера": "closed_7",
-        "Участие в проекте «Гордость Лип": "closed_8",
-
-        # PENALTY CRITERIA (pen_1 to pen_3)
-        "Конфликты с региональной власть": "pen_1",
-        "Внутримуниципальные конфликты": "pen_2",
-        "Данные правоохранительных орган": "pen_3",
-    }
+    @staticmethod
+    def _get_data_columns(row: pd.Series) -> list:
+        """Get non-header columns (skip Муниципалитет, Глава МО, etc.)"""
+        skip_patterns = ['муниципалитет', 'глава', 'мо', 'fio', 'name', 'фио']
+        return [col for col in row.index
+                if not any(skip.lower() in str(col).lower() for skip in skip_patterns)]
 
     @staticmethod
-    def score_pub_1(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_1: Поддержка руководства области
+    def _count_yes_values(row: pd.Series, limit: int = None) -> int:
+        """Count "Да" values in numeric columns, up to limit"""
+        data_cols = IndicatorScorer._get_data_columns(row)
+        count = 0
 
-        Многостолбцовый показатель:
-        - Факт публичной поддержки (Да=1, Нет=0)
-        - Факт поддержки с первым заместителем (Да=1, Нет=0)
-        - Факт поддержки со стороны ключевых руководителей (Да=1, Нет=0)
+        for col in data_cols:
+            if limit and count >= limit:
+                break
 
-        Результат: сумма (0-3)
-        """
-        score = 0.0
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    count += 1
 
-        # Identify columns for pub_1 (3 да/нет questions)
-        # Skip municipality and head name columns
-        skip_cols = ['муниципалитет', 'глава', 'мо', 'fio', 'name']
-        da_net_cols = [col for col in row.index
-                      if col.lower() not in skip_cols
-                      and pd.notna(row[col])
-                      and isinstance(row[col], str)
-                      and row[col].strip().lower() in ['да', 'нет']]
-
-        logger.debug(f"pub_1: Found {len(da_net_cols)} да/нет columns: {da_net_cols}")
-
-        if len(da_net_cols) < 3:
-            logger.debug(f"pub_1: Not enough да/нет columns ({len(da_net_cols)}), expected 3")
-            return None
-
-        # Take first 3 да/нет columns (in order they appear)
-        for col in da_net_cols[:3]:
-            if pd.notna(row[col]):
-                value = str(row[col]).strip().lower()
-                score += 1.0 if value == 'да' else 0.0
-
-        logger.debug(f"pub_1: Calculated score = {score}")
-        return min(score, 3.0)
+        return count
 
     @staticmethod
-    def score_pub_2(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_2: Выполнение задач АГП
+    def _get_numeric_values(row: pd.Series) -> list:
+        """Get all numeric values from data columns"""
+        data_cols = IndicatorScorer._get_data_columns(row)
+        values = []
 
-        Простой числовой показатель (%):
-        - Процент выполнения задач АГП (0.0-1.0 или 0-100%)
-
-        Нормализация: значение * 5 (на шкалу 0-5)
-        """
-        # Find numeric column (not МО name or Глава МО)
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
+        for col in data_cols:
+            val = row[col]
+            if pd.notna(val):
                 try:
-                    value = float(row[col])
-                    # Assume value is in 0-1 range (95% = 0.95)
-                    # If > 1, assume it's in percentage (95 = 95%)
-                    if value > 1:
-                        value = value / 100
-                    return min(value * 5, 5.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_pub_3(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_3: Позиционирование главы МО
-
-        Категориальный показатель (текст):
-        - "функционер" или "хозяйственник" → 3 балла
-        - "размытое" или "некачественное" → 0 баллов
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if 'функционер' in value or 'хозяйственник' in value:
-                    return 3.0
-                elif 'размытое' in value or 'некачественное' in value:
-                    return 0.0
-
-        return None
-
-    @staticmethod
-    def score_pub_4(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_4: Проектная деятельность главы
-
-        Числовой показатель (количество проектов):
-        - Нормализация: MIN(проекты / 2, 3)
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    return min(value / 2, 3.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_pub_5(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_5: Молодежь в добровольчестве
-
-        Числовой показатель (%):
-        - Нормализация: значение * 3
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    if value > 1:
-                        value = value / 100
-                    return min(value * 3, 3.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_pub_6(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_6: Молодежь в Движении Первых
-
-        Числовой показатель (количество членов):
-        - Нормализация: MIN(члены / 100, 3)
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    return min(value / 100, 3.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_pub_7(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_7: Работа с ветеранами СВО (публичная)
-
-        Многостолбцовый показатель:
-        - Количество встреч (число) → встречи/20, макс 1.0
-        - % участия главы (%) → значение * 1
-        - % решенных обращений (%) → значение * 1
-
-        Результат: встречи + участие + решение (0-3)
-        """
-        numeric_cols = []
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    numeric_cols.append(value)
-                except (ValueError, TypeError):
-                    continue
-
-        if len(numeric_cols) < 3:
-            return None
-
-        # First numeric = количество встреч
-        # Second numeric = % участия
-        # Third numeric = % решений
-
-        meet_score = min(numeric_cols[0] / 20, 1.0)  # Max 20 встреч = 1.0 балл
-
-        # For percentages, normalize to 0-1
-        particip = numeric_cols[1]
-        if particip > 1:
-            particip = particip / 100
-        particip_score = min(particip * 1, 1.0)
-
-        solution = numeric_cols[2]
-        if solution > 1:
-            solution = solution / 100
-        solution_score = min(solution * 1, 1.0)
-
-        return min(meet_score + particip_score + solution_score, 3.0)
-
-    @staticmethod
-    def score_pub_8(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_8: Кадровый управленческий резерв
-
-        Числовой показатель (количество в резерве):
-        - Нормализация: MIN(резерв / 5, 3)
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    return min(value / 5, 3.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_pub_9(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pub_9: Работа с грантами
-
-        Многостолбцовый показатель:
-        - Количество побед в грантах (число) → побед/3, макс 1.5
-        - Объем привлеченных средств (млн) → объем/100 * 1.5, макс 1.5
-        - Нарушений (Да/Нет) → Нет=1, Да=-2
-
-        Результат: MAX(0, побед + объем + нарушения) (0-3)
-        """
-        score = 0.0
-        numeric_count = 0
-
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value_str = str(row[col]).strip()
-
-                # Check for да/нет
-                if value_str.lower() in ['да', 'нет']:
-                    violations = 1.0 if value_str.lower() == 'нет' else -2.0
-                    score += violations
-                else:
-                    # Try numeric
-                    try:
-                        value = float(value_str)
-                        if numeric_count == 0:
-                            # First numeric: количество побед
-                            score += min(value / 3, 1.5)
-                        elif numeric_count == 1:
-                            # Second numeric: объем в млн
-                            # Skip dates (if value looks like a date)
-                            if value < 5000:  # Reasonable range for млн
-                                score += min(value / 100 * 1.5, 1.5)
-                        numeric_count += 1
-                    except (ValueError, TypeError):
-                        # Skip non-numeric
-                        pass
-
-        return max(min(score, 3.0), 0.0)
-
-    @staticmethod
-    def score_closed_1(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_1: Партийное мнение в администрации
-
-        Многостолбцовый показатель (3 метрики):
-        - Общее число сотрудников (число) → пропустить
-        - % членов партии (%) → % * 3
-        - % сторонников партии (%) → % * 3
-
-        Результат: MIN(члены + сторонники, 6) (0-6)
-        """
-        score = 0.0
-        numeric_count = 0
-
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-
-                    if numeric_count == 0:
-                        # First numeric: total employees (skip)
-                        pass
-                    elif numeric_count == 1:
-                        # Second: % members
-                        if value > 1:
-                            value = value / 100
-                        score += min(value * 3, 3.0)
-                    elif numeric_count == 2:
-                        # Third: % supporters
-                        if value > 1:
-                            value = value / 100
-                        score += min(value * 3, 3.0)
-
-                    numeric_count += 1
-                except (ValueError, TypeError):
-                    continue
-
-        return min(score, 6.0)
-
-    @staticmethod
-    def score_closed_2(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_2: Альтернативное мнение в органе
-
-        Числовой показатель (%):
-        - Нормализация: значение * 4
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    if value > 1:
-                        value = value / 100
-                    return min(value * 4, 4.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_closed_3(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_3: Целевые показатели АГП (уровень)
-
-        Категориальный показатель (текст):
-        - "превысил" → 5
-        - "выполнен" → 3
-        - "не выполнен" или "не достигнут" → 0
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if 'превысил' in value:
-                    return 5.0
-                elif 'выполнен' in value and 'не' not in value:
-                    return 3.0
-                elif 'не выполнен' in value or 'не достигнут' in value:
-                    return 0.0
-
-        return None
-
-    @staticmethod
-    def score_closed_4(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_4: Целевые показатели АГП (качество)
-
-        Категориальный показатель (текст):
-        - "превышает" → 5
-        - "достигнут" → 3
-        - "не достигнут" или "не выполнен" → 0
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if 'превышает' in value or 'превышен' in value:
-                    return 5.0
-                elif 'достигнут' in value and 'не' not in value:
-                    return 3.0
-                elif 'не достигнут' in value or 'не выполнен' in value:
-                    return 0.0
-
-        return None
-
-    @staticmethod
-    def score_closed_5(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_5: Экономическая привлекательность МО
-
-        Категориальный показатель (текст):
-        - "высокая" → 3
-        - "средняя" → 2
-        - "низкая" или "слабая" → 1
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if 'высокая' in value:
-                    return 3.0
-                elif 'средняя' in value:
-                    return 2.0
-                elif 'низкая' in value or 'слабая' in value:
-                    return 1.0
-
-        return None
-
-    @staticmethod
-    def score_closed_7(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_7: Политическая деятельность ветеранов
-
-        Числовой показатель (%):
-        - Нормализация: значение * 6
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                try:
-                    value = float(row[col])
-                    if value > 1:
-                        value = value / 100
-                    return min(value * 6, 6.0)
-                except (ValueError, TypeError):
-                    continue
-
-        return None
-
-    @staticmethod
-    def score_closed_8(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        closed_8: Проект "Гордость Липецкой земли"
-
-        Может быть категориальным (Да/Нет) или числовым (количество):
-        - Да → 3, Нет → 0
-        - Количество → MIN(количество / 5, 3)
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip()
-
-                # Check for да/нет
-                if value.lower() == 'да':
-                    return 3.0
-                elif value.lower() == 'нет':
-                    return 0.0
-
-                # Try numeric
-                try:
-                    num_value = float(value)
-                    return min(num_value / 5, 3.0)
+                    # Try to convert to float
+                    num_val = float(val)
+                    values.append(num_val)
                 except (ValueError, TypeError):
                     pass
 
-        return None
+        return values
 
     @staticmethod
-    def score_pen_1(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pen_1: Конфликты с региональной властью
+    def _get_first_text_value(row: pd.Series) -> Optional[str]:
+        """Get first text (non-numeric) value from data columns"""
+        data_cols = IndicatorScorer._get_data_columns(row)
 
-        Многостолбцовый показатель (2 факта Да/Нет):
-        - Публичный конфликт (Да=-3, Нет=1)
-        - Конфликт с профильным заместителем (Да=-2, Нет=1)
-
-        Результат: сумма (-5 до 2)
-        """
-        score = 0.0
-        da_net_count = 0
-
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if value in ['да', 'нет']:
-                    if da_net_count == 0:
-                        # Публичный конфликт
-                        score += -3.0 if value == 'да' else 1.0
-                    elif da_net_count == 1:
-                        # Конфликт с профильным
-                        score += -2.0 if value == 'да' else 1.0
-
-                    da_net_count += 1
-                    if da_net_count >= 2:
-                        break
-
-        if da_net_count < 2:
-            return None
-
-        return score
-
-    @staticmethod
-    def score_pen_2(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pen_2: Внутримуниципальные конфликты
-
-        Многостолбцовый показатель (количество конфликтов):
-        - 1+ в квартал → -3
-        - 1+ в год → -2
-        - 0 конфликтов → 1
-        """
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                # Check for text markers
-                if 'квартал' in value:
-                    if any(x in value for x in ['1', '+', 'более']):
-                        return -3.0
-                elif 'год' in value or 'annual' in value:
-                    if any(x in value for x in ['1', '+', 'более']):
-                        return -2.0
-
-                # Try numeric
+        for col in data_cols:
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                # Check if it's not a number
                 try:
-                    count = float(value)
-                    if count >= 1:
-                        return -2.0  # Default: -2 per year
-                    else:
-                        return 1.0
-                except (ValueError, TypeError):
-                    continue
+                    float(val_str)
+                    continue  # Skip numeric values
+                except ValueError:
+                    if val_str and val_str not in ['да', 'нет']:  # Skip да/нет for now
+                        return val_str
+
+        return None
+
+    # ============ PUBLIC INDICATORS (pub_1 to pub_9) ============
+
+    @staticmethod
+    def score_pub_1(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_1: Support (3 yes/no questions) -> 0-3"""
+        count = IndicatorScorer._count_yes_values(row, limit=3)
+        if count == 0:
+            logger.debug(f"pub_1: Found {count} 'да' values")
+            return None
+        logger.debug(f"pub_1: score = {count}")
+        return float(count)
+
+    @staticmethod
+    def score_pub_2(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_2: Task execution (numeric %) -> 0-5"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]  # Take first numeric value
+        # Normalize to 0-1 if percentage
+        if val > 1:
+            val = val / 100
+
+        score = val * 5
+        logger.debug(f"pub_2: value={val}, score={score}")
+        return min(score, 5.0)
+
+    @staticmethod
+    def score_pub_3(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_3: Head positioning (categorical) -> 0-3"""
+        text = IndicatorScorer._get_first_text_value(row)
+        if not text:
+            return None
+
+        if 'функционер' in text or 'хозяйственник' in text:
+            logger.debug(f"pub_3: '{text}' -> 3.0")
+            return 3.0
+        elif 'размытое' in text or 'некачественное' in text:
+            logger.debug(f"pub_3: '{text}' -> 0.0")
+            return 0.0
 
         return None
 
     @staticmethod
-    def score_pen_3(row: pd.Series, col_mapping: Dict[str, str]) -> Optional[float]:
-        """
-        pen_3: Данные правоохранительных органов
-
-        Многостолбцовый показатель (3 факта Да/Нет):
-        - Возбуждение уголовного дела (Да=-5, Нет=1)
-        - Проверки силовых структур (Да=-2, Нет=1)
-        - Публикации (Да=-1, Нет=1)
-
-        Результат: сумма (-8 до 3)
-        """
-        score = 0.0
-        da_net_count = 0
-
-        for col in row.index:
-            if pd.notna(row[col]) and col not in ['Муниципалитет', 'Глава МО']:
-                value = str(row[col]).strip().lower()
-
-                if value in ['да', 'нет']:
-                    if da_net_count == 0:
-                        # Возбуждение дела
-                        score += -5.0 if value == 'да' else 1.0
-                    elif da_net_count == 1:
-                        # Проверки силовых
-                        score += -2.0 if value == 'да' else 1.0
-                    elif da_net_count == 2:
-                        # Публикации
-                        score += -1.0 if value == 'да' else 1.0
-
-                    da_net_count += 1
-                    if da_net_count >= 3:
-                        break
-
-        if da_net_count < 3:
+    def score_pub_4(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_4: Project activity (numeric) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
             return None
 
+        val = values[0]
+        score = min(val / 2, 3.0)
+        logger.debug(f"pub_4: value={val}, score={score}")
         return score
+
+    @staticmethod
+    def score_pub_5(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_5: Youth volunteering (numeric %) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]
+        if val > 1:
+            val = val / 100
+
+        score = min(val * 3, 3.0)
+        logger.debug(f"pub_5: value={val}, score={score}")
+        return score
+
+    @staticmethod
+    def score_pub_6(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_6: Youth in First Movement (numeric) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]
+        score = min(val / 100, 3.0)
+        logger.debug(f"pub_6: value={val}, score={score}")
+        return score
+
+    @staticmethod
+    def score_pub_7(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_7: Veterans work (3 metrics: count, %, %) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if len(values) < 3:
+            logger.debug(f"pub_7: Need 3 numeric values, found {len(values)}")
+            return None
+
+        # First: meetings count -> /20 (max 1.0)
+        meet_score = min(values[0] / 20, 1.0)
+
+        # Second: participation %
+        particip = values[1]
+        if particip > 1:
+            particip = particip / 100
+        particip_score = min(particip, 1.0)
+
+        # Third: solutions %
+        solution = values[2]
+        if solution > 1:
+            solution = solution / 100
+        solution_score = min(solution, 1.0)
+
+        score = min(meet_score + particip_score + solution_score, 3.0)
+        logger.debug(f"pub_7: meets={meet_score:.2f}, particip={particip_score:.2f}, solutions={solution_score:.2f}, score={score:.2f}")
+        return score
+
+    @staticmethod
+    def score_pub_8(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_8: Cadre reserve (numeric) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]
+        score = min(val / 5, 3.0)
+        logger.debug(f"pub_8: value={val}, score={score}")
+        return score
+
+    @staticmethod
+    def score_pub_9(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pub_9: Grants work (wins + volume + violations) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+        data_cols = IndicatorScorer._get_data_columns(row)
+
+        score = 0.0
+
+        # First numeric: wins
+        if len(values) > 0:
+            score += min(values[0] / 3, 1.5)
+
+        # Second numeric: volume (skip if looks like date)
+        if len(values) > 1 and values[1] < 5000:  # Reasonable млн range
+            score += min(values[1] / 100 * 1.5, 1.5)
+
+        # Find да/нет for violations
+        for col in data_cols:
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    score -= 2.0
+                    break
+                elif val_str == 'нет':
+                    score += 1.0
+                    break
+
+        score = max(min(score, 3.0), 0.0)
+        logger.debug(f"pub_9: score={score}")
+        return score
+
+    # ============ CLOSED INDICATORS (closed_1 to closed_8) ============
+
+    @staticmethod
+    def score_closed_1(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_1: Party opinion (% members + % supporters) -> 0-6"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if len(values) < 3:  # Need: total, members %, supporters %
+            return None
+
+        # Skip first (total count), use % values
+        members = values[1] if len(values) > 1 else 0
+        supporters = values[2] if len(values) > 2 else 0
+
+        if members > 1:
+            members = members / 100
+        if supporters > 1:
+            supporters = supporters / 100
+
+        score = min((members * 3) + (supporters * 3), 6.0)
+        logger.debug(f"closed_1: members={members:.2f}, supporters={supporters:.2f}, score={score}")
+        return score
+
+    @staticmethod
+    def score_closed_2(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_2: Alternative mandates (numeric %) -> 0-4"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]
+        if val > 1:
+            val = val / 100
+
+        score = min(val * 4, 4.0)
+        logger.debug(f"closed_2: value={val}, score={score}")
+        return score
+
+    @staticmethod
+    def score_closed_3(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_3: AGP targets (level) -> 0-5"""
+        text = IndicatorScorer._get_first_text_value(row)
+        if not text:
+            return None
+
+        if 'превысил' in text:
+            logger.debug(f"closed_3: '{text}' -> 5.0")
+            return 5.0
+        elif 'выполнен' in text and 'не' not in text:
+            logger.debug(f"closed_3: '{text}' -> 3.0")
+            return 3.0
+        else:
+            logger.debug(f"closed_3: '{text}' -> 0.0")
+            return 0.0
+
+    @staticmethod
+    def score_closed_4(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_4: AGP targets (quality) -> 0-5"""
+        text = IndicatorScorer._get_first_text_value(row)
+        if not text:
+            return None
+
+        if 'превышает' in text or 'превышен' in text:
+            logger.debug(f"closed_4: '{text}' -> 5.0")
+            return 5.0
+        elif 'достигнут' in text and 'не' not in text:
+            logger.debug(f"closed_4: '{text}' -> 3.0")
+            return 3.0
+        else:
+            logger.debug(f"closed_4: '{text}' -> 0.0")
+            return 0.0
+
+    @staticmethod
+    def score_closed_5(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_5: Economic attractiveness -> 0-3"""
+        text = IndicatorScorer._get_first_text_value(row)
+        if not text:
+            return None
+
+        if 'высокая' in text:
+            logger.debug(f"closed_5: '{text}' -> 3.0")
+            return 3.0
+        elif 'средняя' in text:
+            logger.debug(f"closed_5: '{text}' -> 2.0")
+            return 2.0
+        elif 'низкая' in text or 'слабая' in text:
+            logger.debug(f"closed_5: '{text}' -> 1.0")
+            return 1.0
+
+        return None
+
+    @staticmethod
+    def score_closed_7(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_7: Veterans political activity (%) -> 0-6"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        val = values[0]
+        if val > 1:
+            val = val / 100
+
+        score = min(val * 6, 6.0)
+        logger.debug(f"closed_7: value={val}, score={score}")
+        return score
+
+    @staticmethod
+    def score_closed_8(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_8: Pride project -> 0-3"""
+        data_cols = IndicatorScorer._get_data_columns(row)
+
+        # Try да/нет first
+        for col in data_cols:
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    logger.debug(f"closed_8: да -> 3.0")
+                    return 3.0
+                elif val_str == 'нет':
+                    logger.debug(f"closed_8: нет -> 0.0")
+                    return 0.0
+
+        # Try numeric
+        values = IndicatorScorer._get_numeric_values(row)
+        if values:
+            score = min(values[0] / 5, 3.0)
+            logger.debug(f"closed_8: value={values[0]}, score={score}")
+            return score
+
+        return None
+
+    # ============ PENALTY INDICATORS (pen_1 to pen_3) ============
+
+    @staticmethod
+    def score_pen_1(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pen_1: Regional conflicts (2 yes/no) -> -5 to +2"""
+        data_cols = IndicatorScorer._get_data_columns(row)
+        score = 0.0
+        count = 0
+
+        for col in data_cols:
+            if count >= 2:
+                break
+
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    if count == 0:
+                        score += -3.0  # Public conflict
+                    else:
+                        score += -2.0  # Professional conflict
+                elif val_str == 'нет':
+                    score += 1.0
+
+                count += 1
+
+        if count < 2:
+            logger.debug(f"pen_1: Only found {count} да/нет values, need 2")
+            return None
+
+        logger.debug(f"pen_1: score={score}")
+        return score
+
+    @staticmethod
+    def score_pen_2(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pen_2: Internal conflicts (count) -> -3 to +1"""
+        values = IndicatorScorer._get_numeric_values(row)
+        if not values:
+            return None
+
+        count = int(values[0])
+        if count >= 1:
+            score = -2.0
+        else:
+            score = 1.0
+
+        logger.debug(f"pen_2: count={count}, score={score}")
+        return score
+
+    @staticmethod
+    def score_pen_3(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """pen_3: Law enforcement data (3 yes/no) -> -8 to +3"""
+        data_cols = IndicatorScorer._get_data_columns(row)
+        score = 0.0
+        count = 0
+
+        for col in data_cols:
+            if count >= 3:
+                break
+
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    if count == 0:
+                        score += -5.0  # Criminal case
+                    elif count == 1:
+                        score += -2.0  # Inspections
+                    else:
+                        score += -1.0  # Publications
+                elif val_str == 'нет':
+                    score += 1.0
+
+                count += 1
+
+        if count < 3:
+            logger.debug(f"pen_3: Only found {count} да/нет values, need 3")
+            return None
+
+        logger.debug(f"pen_3: score={score}")
+        return score
+
+    # ============ MAIN SCORING METHOD ============
 
     @classmethod
     def score_indicator(cls, indicator_code: str, row: pd.Series) -> Optional[float]:
-        """
-        Main method to score any indicator.
-
-        Args:
-            indicator_code: pub_1, pub_2, ..., pen_3
-            row: pandas Series with row data
-
-        Returns:
-            Score (float) or None if cannot calculate
-        """
+        """Score any indicator"""
         scoring_func = getattr(cls, f"score_{indicator_code}", None)
 
         if not scoring_func:
@@ -590,13 +457,12 @@ class IndicatorScorer:
             return None
 
         try:
-            logger.debug(f"Scoring {indicator_code}, row columns: {list(row.index)}")
             score = scoring_func(row, {})
 
             if score is not None:
                 logger.info(f"{indicator_code}: score = {score}")
             else:
-                logger.debug(f"{indicator_code}: could not calculate score (returned None)")
+                logger.debug(f"{indicator_code}: returned None")
 
             return score
         except Exception as e:
