@@ -635,27 +635,29 @@ def convert_text_to_score(sheet_name: str, column_name: str, value: str, row: di
 
 
 @router.post("/official-methodology")
-async def import_official_methodology_csv(
+async def import_official_methodology_csv_deprecated(
     file: UploadFile = File(...),
     period_month: str = "2024-01",
     db: Session = Depends(get_db),
 ):
     """
-    Import CSV file with official methodology indicator data.
+    ⚠️ DEPRECATED: Use /api/data-import/import-official-methodology instead.
 
-    Expected CSV format:
-    - First column: Муниципалитет (Municipality name)
-    - Columns: pub_1, pub_2, pub_3, pub_4, pub_5, pub_6, pub_7, pub_8, pub_9
-               closed_1, closed_2, closed_3, closed_4, closed_5, closed_6, closed_7, closed_8
-               pen_1, pen_2, pen_3
-
-    Example row:
-    Липецк, 3, 5, 3, 3, 3, 3, 3, 3, 3, 6, 4, 5, 5, 3, 3, 6, 2, -3, -3, -5
-
-    Parameters:
-    - file: CSV file to upload
-    - period_month: Period in YYYY-MM format (default: 2024-01)
+    This endpoint is deprecated and maintained for backward compatibility only.
     """
+    logger.warning(f"DEPRECATED endpoint called: /official-methodology. Please use /import-official-methodology instead.")
+
+    raise HTTPException(
+        status_code=410,  # 410 Gone
+        detail={
+            "error": "DEPRECATED ENDPOINT",
+            "message": "The /official-methodology endpoint is deprecated.",
+            "use_instead": "POST /api/data-import/import-official-methodology",
+            "reason": "Unified endpoint supports all formats (CSV, Excel) with methodology compliance via IndicatorScorer",
+            "migration": "Redirect your requests to /import-official-methodology with the same file and period_month parameters"
+        }
+    )
+
     try:
         # Read CSV file
         content = await file.read()
@@ -832,22 +834,29 @@ async def import_official_methodology_csv(
 
 
 @router.post("/official-methodology-excel")
-async def import_official_methodology_excel(
+async def import_official_methodology_excel_deprecated(
     file: UploadFile = File(...),
     period_month: str = "2024-01",
     db: Session = Depends(get_db),
 ):
     """
-    Import Excel file with official methodology indicator data.
+    ⚠️ DEPRECATED: Use /api/data-import/import-official-methodology instead.
 
-    Supports two formats:
-    1. Single sheet with columns: Муниципалитет, pub_1, pub_2, ... closed_1, ... pen_1, etc.
-    2. Multiple sheets (one per criterion) with Муниципалитет and values
-
-    Parameters:
-    - file: Excel file to upload (.xlsx)
-    - period_month: Period in YYYY-MM format (default: 2024-01)
+    This endpoint is deprecated and maintained for backward compatibility only.
     """
+    logger.warning(f"DEPRECATED endpoint called: /official-methodology-excel. Please use /import-official-methodology instead.")
+
+    raise HTTPException(
+        status_code=410,  # 410 Gone
+        detail={
+            "error": "DEPRECATED ENDPOINT",
+            "message": "The /official-methodology-excel endpoint is deprecated.",
+            "use_instead": "POST /api/data-import/import-official-methodology",
+            "reason": "Unified endpoint supports all formats (CSV, Excel) with methodology compliance via IndicatorScorer",
+            "migration": "Redirect your requests to /import-official-methodology with the same file and period_month parameters"
+        }
+    )
+
     try:
         # Read Excel file
         content = await file.read()
