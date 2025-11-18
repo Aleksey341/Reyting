@@ -233,11 +233,24 @@ async def import_official_methodology_excel(
     try:
         # Read Excel file
         content = await file.read()
+        logger.info(f"🔹 Received file: {file.filename}, size: {len(content)} bytes")
 
         # Get all sheet names
         xls = pd.ExcelFile(io.BytesIO(content))
         sheet_names = xls.sheet_names
-        logger.info(f"Excel file has {len(sheet_names)} sheets: {sheet_names}")
+        logger.info(f"🔹 Excel file has {len(sheet_names)} sheets: {sheet_names}")
+
+        # Debug: Return sheet info immediately
+        if not sheet_names:
+            logger.error("❌ No sheets found in Excel file!")
+            return {
+                "status": "error",
+                "message": "Excel file has no sheets",
+                "debug": {
+                    "file_size": len(content),
+                    "sheets_found": 0
+                }
+            }
 
         # Parse period_month
         from datetime import datetime, timedelta
@@ -555,7 +568,8 @@ async def import_official_methodology_excel(
                 "values_loaded": values_loaded,
                 "period": period_month,
                 "period_id": period.period_id,
-                "methodology": "Official 16 criteria"
+                "methodology": "Official 16 criteria",
+                "total_sheets": len(sheet_names)
             },
             "next_steps": [
                 "1. Hard refresh Rating tab (Ctrl+F5)",
