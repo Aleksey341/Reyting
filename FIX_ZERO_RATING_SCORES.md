@@ -25,34 +25,52 @@ WHERE di.rating_type = 'ПУБЛИЧНЫЙ'  -- Returns 0 if no indicators match
 
 ## Solution
 
-Execute the SQL fix script to:
-1. Set `rating_type` on all existing indicators matching the code pattern
-2. Clear corrupted FactSummary records
-3. Recalculate aggregated scores correctly
+The fix now runs **automatically** on every application startup! No manual action needed.
 
-### Option 1: Using psql (Recommended)
+When the container starts, the new migration `fix_zero_rating_scores()` will:
+1. Set `rating_type` on all official methodology indicators
+2. Detect zero/null scores in FactSummary
+3. Recalculate aggregated scores automatically
+
+### Option 1: Automatic Fix (Default - No Action Required)
+
+Just restart your Amvera deployment:
+1. Go to Amvera dashboard
+2. Stop the container
+3. Start the container again
+4. On startup, logs will show:
+   ```
+   🔄 Running migration: Fix zero rating scores...
+     Setting rating_type on official indicators...
+     ✓ rating_type properly set on all indicators
+     Found X zero/null scores, recalculating FactSummary...
+     ✓ FactSummary recalculated successfully
+   ```
+
+That's it! Refresh your dashboard and scores will show correctly.
+
+### Option 2: Using Python Script (If automatic fix doesn't work)
+
+If the automatic migration encounters issues, you can run the Python fix directly:
 
 ```bash
-# Connect to database and execute fix script
-psql $DATABASE_URL < backend/fix_zero_scores.sql
-
-# Or if DATABASE_URL is not set:
-psql -U reyting_user -d reytingdb -h localhost -f backend/fix_zero_scores.sql
+# In container/server environment:
+cd /app/backend
+python3 fix_rating_scores.py
 ```
 
-### Option 2: Using Python Script
-
+Or locally (for testing):
 ```bash
-# Install dependencies if needed
+# Install dependencies
 pip install sqlalchemy psycopg2-binary python-dotenv
 
-# Run the Python fix script
+# Run the fix script
 python3 backend/fix_rating_scores.py
 ```
 
-### Option 3: Manual SQL
+### Option 3: Manual SQL (If you have direct database access)
 
-If you have direct database access, execute these commands in order:
+If you have direct access to PostgreSQL via pgAdmin or another SQL client, execute these commands in order:
 
 ```sql
 -- 1. Ensure rating_type is set on public criteria
