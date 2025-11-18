@@ -602,6 +602,110 @@ def calculate_fact_summary_from_indicators():
             pass
 
 
+def fix_zero_rating_scores():
+    """
+    Migration: Fix zero rating scores by ensuring indicators have proper rating_type
+    This fixes the issue where all scores show as 0 after data import
+    """
+    logger.info("🔄 Running migration: Fix zero rating scores...")
+
+    try:
+        session = SessionLocal()
+
+        # Step 1: Ensure rating_type is set on all official indicators
+        logger.info("  Setting rating_type on official indicators...")
+
+        # PUBLIC indicators
+        session.execute(text("""
+            UPDATE dim_indicator
+            SET rating_type = 'ПУБЛИЧНЫЙ'
+            WHERE code LIKE 'pub_%' AND rating_type IS NULL
+        """))
+
+        # CLOSED indicators
+        session.execute(text("""
+            UPDATE dim_indicator
+            SET rating_type = 'ЗАКРЫТЫЙ'
+            WHERE code LIKE 'closed_%' AND rating_type IS NULL
+        """))
+
+        # PENALTY indicators
+        session.execute(text("""
+            UPDATE dim_indicator
+            SET is_penalty = TRUE
+            WHERE code LIKE 'pen_%' AND is_penalty = FALSE
+        """))
+
+        session.commit()
+        logger.info("  ✓ rating_type properly set on all indicators")
+
+        # Step 2: Check if we need to recalculate FactSummary
+        result = session.execute(text("""
+            SELECT COUNT(*) as cnt FROM fact_summary WHERE score_total = 0 OR score_total IS NULL
+        """))
+        zero_count = result.scalar()
+
+        if zero_count and zero_count > 0:
+            logger.info(f"  Found {zero_count} zero/null scores, recalculating FactSummary...")
+
+            # Clear corrupted FactSummary
+            session.execute(text("DELETE FROM fact_summary"))
+            session.commit()
+
+            # Recalculate aggregated scores
+            session.execute(text("""
+                INSERT INTO fact_summary (mo_id, period_id, version_id, score_public, score_closed, score_penalties, score_total, zone, updated_at)
+                WITH aggregated AS (
+                    SELECT
+                        fi.mo_id,
+                        fi.period_id,
+                        COALESCE(SUM(CASE WHEN di.rating_type = 'ПУБЛИЧНЫЙ' THEN fi.score ELSE 0 END), 0) as score_public,
+                        COALESCE(SUM(CASE WHEN di.rating_type = 'ЗАКРЫТЫЙ' THEN fi.score ELSE 0 END), 0) as score_closed,
+                        COALESCE(SUM(CASE WHEN di.is_penalty = TRUE THEN fi.score ELSE 0 END), 0) as score_penalties
+                    FROM fact_indicator fi
+                    JOIN dim_indicator di ON fi.ind_id = di.ind_id
+                    WHERE fi.score IS NOT NULL
+                    GROUP BY fi.mo_id, fi.period_id
+                )
+                SELECT
+                    mo_id,
+                    period_id,
+                    1 as version_id,
+                    score_public,
+                    score_closed,
+                    score_penalties,
+                    GREATEST(0.0, score_public + score_closed + score_penalties) as score_total,
+                    CASE
+                        WHEN GREATEST(0.0, score_public + score_closed + score_penalties) >= 53 THEN 'Зелёная'
+                        WHEN GREATEST(0.0, score_public + score_closed + score_penalties) >= 29 THEN 'Жёлтая'
+                        ELSE 'Красная'
+                    END as zone,
+                    NOW() as updated_at
+                FROM aggregated
+                ON CONFLICT (mo_id, period_id, version_id) DO UPDATE SET
+                    score_public = EXCLUDED.score_public,
+                    score_closed = EXCLUDED.score_closed,
+                    score_penalties = EXCLUDED.score_penalties,
+                    score_total = EXCLUDED.score_total,
+                    zone = EXCLUDED.zone,
+                    updated_at = NOW()
+            """))
+            session.commit()
+            logger.info("  ✓ FactSummary recalculated successfully")
+        else:
+            logger.info("  ℹ No zero scores detected, skipping recalculation")
+
+        session.close()
+
+    except Exception as e:
+        logger.error(f"✗ Fix zero rating scores migration failed: {str(e)}")
+        try:
+            session.rollback()
+            session.close()
+        except:
+            pass
+
+
 def run_all_migrations():
     """Run all database migrations on startup"""
     logger.info("=" * 80)
@@ -614,7 +718,8 @@ def run_all_migrations():
     apply_criteria_blocks_migration()           # Create criteria blocks
     ensure_proper_indicator_codes()             # Ensure indicators have proper codes (pm_*, ca_*, etc)
     fix_fact_indicator_scores()                 # Fix NULL scores in fact_indicator
-    implement_official_methodology()                 # Implement official methodology
+    implement_official_methodology()            # Implement official methodology
+    fix_zero_rating_scores()                    # Fix zero rating scores (NEW)
     calculate_fact_summary_from_indicators()    # Calculate summary scores from indicators
 
     logger.info("=" * 80)
