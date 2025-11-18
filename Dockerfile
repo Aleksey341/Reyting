@@ -18,10 +18,15 @@ WORKDIR /build
 COPY frontend/package*.json ./
 
 # Install dependencies with npm
-# Use npm install instead of npm ci to avoid lock file conflicts
-# --legacy-peer-deps allows installing packages with mismatched peer dependencies
-# --no-optional skips optional dependencies for faster install
-RUN npm install --legacy-peer-deps --no-optional --no-fund 2>&1 | grep -E "^(npm|added|packages)" || true
+# Strategy: Clear cache, set npm registry with mirror fallback, retry on failure
+# This approach handles corrupted packages from npm registry
+RUN npm cache clean --force && \
+    npm config set registry https://registry.npmjs.org/ && \
+    npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || \
+    (echo "First attempt failed, retrying with different registry..." && \
+     npm cache clean --force && \
+     npm config set registry https://registry.npmmirror.com && \
+     npm install --legacy-peer-deps --no-optional --no-fund --fetch-timeout=60000 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000)
 
 # Copy frontend source code
 COPY frontend/ ./
