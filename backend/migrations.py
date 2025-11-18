@@ -474,7 +474,7 @@ def implement_official_methodology():
                 DimIndicator(code='closed_5', name='Экономическая привлекательность МО', block='Политический менеджмент', rating_type='ЗАКРЫТЫЙ', max_points=3),
                 DimIndicator(code='closed_6', name='Работа с ветеранами СВО', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=3),
                 DimIndicator(code='closed_7', name='Политическая деятельность ветеранов', block='Забота и внимание', rating_type='ЗАКРЫТЫЙ', max_points=6),
-                DimIndicator(code='closed_8', name='Проект Гордость Липецкой земли', block='Развитие кадрового потенциала', rating_type='ЗАКРЫТЫЙ', max_points=2),
+                DimIndicator(code='closed_8', name='Проект Гордость Липецкой земли', block='Развитие кадрового потенциала', rating_type='ЗАКРЫТЫЙ', max_points=3),
             ]
             penalty_criteria = [
                 DimIndicator(code='pen_1', name='Конфликты с региональной властью', block='Штрафные критерии', max_points=-3, is_penalty=True),

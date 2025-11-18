@@ -92,9 +92,9 @@ The official methodology defines **16 criteria** organized into two rating types
     - Political activity of veterans (party members + supporters)
 
 **Block 3: Development** - 3 points
-17. `closed_8` - Проект Гордость Липецкой земли (2 pts)
+17. `closed_8` - Проект Гордость Липецкой земли (3 pts)
     - Project "Pride of Lipetsk Land"
-    - Scoring: ≥1 representative = 2 pts, None = 0 pts
+    - Scoring: ≥1 representative = 3 pts, None = 0 pts
 
 **CLOSED TOTAL: 8 criteria = 35 points**
 
