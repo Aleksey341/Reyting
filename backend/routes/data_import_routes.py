@@ -301,8 +301,8 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         "Позиционирование главы МО": "pub_3",
         "Проектная деятельность": "pub_4",
         "Вовлеченность молодежи 1": "pub_5",
-        "Вовлеченность молодежи 2": "pub_6",
-        "Личная работа главы с ветеранам": "pub_7",
+        "Вовлеченность молодежи 2  ": "pub_6",  # Note: sheet name has trailing spaces
+        "Работа главы с ветеранам": "pub_7",
         "Кадровый управленческий резерв": "pub_8",
         "Работа с грантами": "pub_9",
         # CLOSED
@@ -312,9 +312,9 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         "Показатели АГП (Качество)": "closed_4",
         "Экономическая привлекательность": "closed_5",
         "деятельность ветеранов СВО": "closed_7",
-        "Участие в проекте": "closed_8",
+        "Участие в проекте  ЛО": "closed_8",  # Note: sheet name has extra spaces
         # PENALTY
-        "Конфликты с региональной": "pen_1",
+        "Конфликты с региональной  ВЛ": "pen_1",  # Note: sheet name has extra spaces
         "Внутримуниципальные конфликты": "pen_2",
         "Данные правоохранительных орган": "pen_3",
     }
