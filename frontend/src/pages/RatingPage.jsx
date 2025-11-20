@@ -51,10 +51,9 @@ export default function RatingPage({ period }) {
         { code: 'closed_4', number: '13', label: 'Целевые показатели АГП (качество)', maxPoints: 5 },
         { code: 'closed_5', number: '14', label: 'Экономическая привлекательность', maxPoints: 3 },
         // Block 2: Care & Attention (2 criteria = 9 points)
-        { code: 'closed_6', number: '15', label: 'Работа с ветеранами СВО (закрыто)', maxPoints: 3 },
-        { code: 'closed_7', number: '16', label: 'Политическая деятельность ветеранов', maxPoints: 6 },
+        { code: 'closed_7', number: '15', label: 'Политическая деятельность ветеранов', maxPoints: 6 },
         // Block 3: Development (1 criterion = 2 points)
-        { code: 'closed_8', number: '17', label: 'Проект "Гордость Липецкой земли"', maxPoints: 2 },
+        { code: 'closed_8', number: '16', label: 'Проект "Гордость Липецкой земли"', maxPoints: 2 },
       ],
     },
   ];
