@@ -350,8 +350,8 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         indicator_code = sheet_to_code[sheet_name]
         logger.info(f"Processing sheet '{sheet_name}' as criterion '{indicator_code}'")
 
-        # Read with proper header handling (skip merged cells, use row 1 as header)
-        df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=1)
+        # Read with proper header handling (use row 0 as header)
+        df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=0)
         logger.info(f"Sheet '{sheet_name}': {df.shape} - columns: {list(df.columns)}")
         logger.debug(f"First 3 rows of sheet:\n{df.head(3)}")
 
