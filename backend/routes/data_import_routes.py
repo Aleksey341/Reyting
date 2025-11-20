@@ -350,17 +350,24 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         indicator_code = sheet_to_code[sheet_name]
         logger.info(f"Processing sheet '{sheet_name}' as criterion '{indicator_code}'")
 
-        df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name)
+        # Read with proper header handling (skip merged cells, use row 1 as header)
+        df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=1)
         logger.info(f"Sheet '{sheet_name}': {df.shape} - columns: {list(df.columns)}")
 
-        # Find municipality column
+        # Find municipality column (first column usually contains MO names)
         mo_col_name = None
+        # Try to find by name first
         for col in df.columns:
-            if 'муниципалитет' in str(col).lower():
+            if 'муниципалитет' in str(col).lower() or col == df.columns[0]:
                 mo_col_name = col
                 break
 
+        # If not found by name, use first column
         if not mo_col_name:
+            mo_col_name = df.columns[0]
+            logger.info(f"Using first column as municipality: '{mo_col_name}'")
+
+        if mo_col_name is None:
             logger.warning(f"No municipality column found in sheet '{sheet_name}'")
             continue
 
