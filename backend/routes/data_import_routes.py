@@ -353,7 +353,9 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         # Read with proper header handling (use row 0 as header)
         df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=0)
         logger.info(f"Sheet '{sheet_name}': {df.shape} - columns: {list(df.columns)}")
-        logger.debug(f"First 3 rows of sheet:\n{df.head(3)}")
+        logger.debug(f"First row sample data:")
+        if len(df) > 0:
+            logger.debug(f"  {df.iloc[0].to_dict()}")
 
         # Find municipality column (first column usually contains MO names)
         mo_col_name = None
@@ -400,7 +402,9 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
 
             # Use IndicatorScorer to calculate score from raw data
             logger.debug(f"Scoring {indicator_code} for {mo_name}")
-            value_float = IndicatorScorer.score_indicator(indicator_code, df.iloc[idx])
+            row_data = df.iloc[idx]
+            logger.debug(f"  Row data: {row_data.to_dict()}")
+            value_float = IndicatorScorer.score_indicator(indicator_code, row_data)
 
             if value_float is None:
                 logger.warning(f"Could not score {indicator_code} for {mo_name}, skipping")
