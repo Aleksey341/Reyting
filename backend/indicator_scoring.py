@@ -19,9 +19,18 @@ class IndicatorScorer:
     @staticmethod
     def _get_data_columns(row: pd.Series) -> list:
         """Get non-header columns (skip Муниципалитет, Глава МО, etc.)"""
-        skip_patterns = ['муниципалитет', 'глава', 'мо', 'fio', 'name', 'фио']
-        return [col for col in row.index
-                if not any(skip.lower() in str(col).lower() for skip in skip_patterns)]
+        skip_patterns = ['муниципалитет', 'глава', 'мо', 'fio', 'name', 'фио', '№', 'unnamed']
+        data_cols = []
+        for col in row.index:
+            col_str = str(col).strip().lower()
+            # Skip if matches skip patterns
+            if any(skip.lower() in col_str for skip in skip_patterns):
+                continue
+            # Skip NaN columns
+            if pd.isna(row[col]) or row[col] == '':
+                continue
+            data_cols.append(col)
+        return data_cols
 
     @staticmethod
     def _count_yes_values(row: pd.Series, limit: int = None) -> int:
@@ -85,26 +94,40 @@ class IndicatorScorer:
         """pub_1: Support (3 yes/no questions) -> 0-3"""
         count = IndicatorScorer._count_yes_values(row, limit=3)
         if count == 0:
-            logger.debug(f"pub_1: Found {count} 'да' values")
-            return None
+            logger.debug(f"pub_1: Found {count} 'да' values, treating as 0")
+            return 0.0
         logger.debug(f"pub_1: score = {count}")
         return float(count)
 
     @staticmethod
     def score_pub_2(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pub_2: Task execution (numeric %) -> 0-5"""
+        """pub_2: Task execution (numeric %) -> 0-5 (max)"""
         values = IndicatorScorer._get_numeric_values(row)
         if not values:
-            return None
+            logger.debug(f"pub_2: No numeric values found")
+            return 0.0
 
         val = values[0]  # Take first numeric value
         # Normalize to 0-1 if percentage
         if val > 1:
             val = val / 100
 
-        score = val * 5
-        logger.debug(f"pub_2: value={val}, score={score}")
-        return min(score, 5.0)
+        # Scoring: 91-100% -> 5, 81-90% -> 4, 71-80% -> 3, 61-70% -> 2, 51-60% -> 1, <50% -> 0
+        if val >= 0.91:
+            score = 5.0
+        elif val >= 0.81:
+            score = 4.0
+        elif val >= 0.71:
+            score = 3.0
+        elif val >= 0.61:
+            score = 2.0
+        elif val >= 0.51:
+            score = 1.0
+        else:
+            score = 0.0
+
+        logger.debug(f"pub_2: value={val:.2%}, score={score}")
+        return score
 
     @staticmethod
     def score_pub_3(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
@@ -139,26 +162,49 @@ class IndicatorScorer:
         """pub_5: Youth volunteering (numeric %) -> 0-3"""
         values = IndicatorScorer._get_numeric_values(row)
         if not values:
-            return None
+            logger.debug(f"pub_5: No numeric values found")
+            return 0.0
 
         val = values[0]
         if val > 1:
             val = val / 100
 
-        score = min(val * 3, 3.0)
-        logger.debug(f"pub_5: value={val}, score={score}")
+        # Scoring: >50% -> 3, 26-50% -> 2, 16-25% -> 1, <15% -> 0
+        if val > 0.50:
+            score = 3.0
+        elif val >= 0.26:
+            score = 2.0
+        elif val >= 0.16:
+            score = 1.0
+        else:
+            score = 0.0
+
+        logger.debug(f"pub_5: value={val:.2%}, score={score}")
         return score
 
     @staticmethod
     def score_pub_6(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pub_6: Youth in First Movement (numeric) -> 0-3"""
+        """pub_6: Youth in First Movement (numeric %) -> 0-3"""
         values = IndicatorScorer._get_numeric_values(row)
         if not values:
-            return None
+            logger.debug(f"pub_6: No numeric values found")
+            return 0.0
 
         val = values[0]
-        score = min(val / 100, 3.0)
-        logger.debug(f"pub_6: value={val}, score={score}")
+        if val > 1:
+            val = val / 100
+
+        # Scoring: >50% -> 3, 26-50% -> 2, 16-25% -> 1, <15% -> 0
+        if val > 0.50:
+            score = 3.0
+        elif val >= 0.26:
+            score = 2.0
+        elif val >= 0.16:
+            score = 1.0
+        else:
+            score = 0.0
+
+        logger.debug(f"pub_6: value={val:.2%}, score={score}")
         return score
 
     @staticmethod
@@ -190,14 +236,27 @@ class IndicatorScorer:
 
     @staticmethod
     def score_pub_8(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pub_8: Cadre reserve (numeric) -> 0-3"""
+        """pub_8: Cadre reserve (numeric %) -> 0-3"""
         values = IndicatorScorer._get_numeric_values(row)
         if not values:
-            return None
+            logger.debug(f"pub_8: No numeric values found")
+            return 0.0
 
         val = values[0]
-        score = min(val / 5, 3.0)
-        logger.debug(f"pub_8: value={val}, score={score}")
+        if val > 1:
+            val = val / 100
+
+        # Scoring: 80-100% -> 3, 50-79% -> 2, 30-49% -> 1
+        if val >= 0.80:
+            score = 3.0
+        elif val >= 0.50:
+            score = 2.0
+        elif val >= 0.30:
+            score = 1.0
+        else:
+            score = 0.0
+
+        logger.debug(f"pub_8: value={val:.2%}, score={score}")
         return score
 
     @staticmethod
@@ -206,15 +265,31 @@ class IndicatorScorer:
         values = IndicatorScorer._get_numeric_values(row)
         data_cols = IndicatorScorer._get_data_columns(row)
 
+        if not values:
+            logger.debug(f"pub_9: No numeric values found")
+            return 0.0
+
         score = 0.0
 
-        # First numeric: wins
+        # First numeric: wins count
         if len(values) > 0:
-            score += min(values[0] / 3, 1.5)
+            wins = values[0]
+            # 3+ wins -> 1.5, 2 wins -> 1.0, 1 win -> 0.5
+            if wins >= 3:
+                score += 1.5
+            elif wins >= 2:
+                score += 1.0
+            elif wins >= 1:
+                score += 0.5
 
-        # Second numeric: volume (skip if looks like date)
-        if len(values) > 1 and values[1] < 5000:  # Reasonable млн range
-            score += min(values[1] / 100 * 1.5, 1.5)
+        # Second numeric: volume (млн руб)
+        if len(values) > 1:
+            volume = values[1]
+            # >= 10 млн -> 1.5, >= 1 млн -> 1.0
+            if volume >= 10:
+                score += 1.5
+            elif volume >= 1:
+                score += 1.0
 
         # Find да/нет for violations
         for col in data_cols:
@@ -225,11 +300,11 @@ class IndicatorScorer:
                     score -= 2.0
                     break
                 elif val_str == 'нет':
-                    score += 1.0
+                    score += 0.5
                     break
 
         score = max(min(score, 3.0), 0.0)
-        logger.debug(f"pub_9: score={score}")
+        logger.debug(f"pub_9: wins={values[0] if values else 0}, volume={values[1] if len(values) > 1 else 0}, score={score}")
         return score
 
     # ============ CLOSED INDICATORS (closed_1 to closed_8) ============
@@ -238,20 +313,22 @@ class IndicatorScorer:
     def score_closed_1(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
         """closed_1: Party opinion (% members + % supporters) -> 0-6"""
         values = IndicatorScorer._get_numeric_values(row)
-        if len(values) < 3:  # Need: total, members %, supporters %
-            return None
+        if len(values) < 2:
+            logger.debug(f"closed_1: Need 2 numeric values (members%, supporters%), found {len(values)}")
+            return 0.0
 
-        # Skip first (total count), use % values
-        members = values[1] if len(values) > 1 else 0
-        supporters = values[2] if len(values) > 2 else 0
+        # Take first two numeric values as % members and % supporters
+        members = values[0]
+        supporters = values[1] if len(values) > 1 else 0
 
         if members > 1:
             members = members / 100
         if supporters > 1:
             supporters = supporters / 100
 
+        # Scoring: members % * 3 + supporters % * 3
         score = min((members * 3) + (supporters * 3), 6.0)
-        logger.debug(f"closed_1: members={members:.2f}, supporters={supporters:.2f}, score={score}")
+        logger.debug(f"closed_1: members={members:.2%}, supporters={supporters:.2%}, score={score:.1f}")
         return score
 
     @staticmethod
@@ -259,14 +336,22 @@ class IndicatorScorer:
         """closed_2: Alternative mandates (numeric %) -> 0-4"""
         values = IndicatorScorer._get_numeric_values(row)
         if not values:
-            return None
+            logger.debug(f"closed_2: No numeric values found")
+            return 0.0
 
         val = values[0]
         if val > 1:
             val = val / 100
 
-        score = min(val * 4, 4.0)
-        logger.debug(f"closed_2: value={val}, score={score}")
+        # Scoring: 100% -> 4, 94-99% -> 2, <94% -> 0
+        if val >= 1.0:
+            score = 4.0
+        elif val >= 0.94:
+            score = 2.0
+        else:
+            score = 0.0
+
+        logger.debug(f"closed_2: value={val:.2%}, score={score}")
         return score
 
     @staticmethod
@@ -324,50 +409,61 @@ class IndicatorScorer:
 
     @staticmethod
     def score_closed_7(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """closed_7: Veterans political activity (%) -> 0-6"""
+        """closed_7: Veterans political activity (% members + % supporters) -> 0-6"""
         values = IndicatorScorer._get_numeric_values(row)
-        if not values:
-            return None
+        if len(values) < 2:
+            logger.debug(f"closed_7: Need 2 numeric values, found {len(values)}")
+            return 0.0
 
-        val = values[0]
-        if val > 1:
-            val = val / 100
+        members = values[0]
+        supporters = values[1] if len(values) > 1 else 0
 
-        score = min(val * 6, 6.0)
-        logger.debug(f"closed_7: value={val}, score={score}")
+        if members > 1:
+            members = members / 100
+        if supporters > 1:
+            supporters = supporters / 100
+
+        # Scoring: members % * 3 + supporters % * 3
+        score = min((members * 3) + (supporters * 3), 6.0)
+        logger.debug(f"closed_7: members={members:.2%}, supporters={supporters:.2%}, score={score:.1f}")
         return score
 
     @staticmethod
     def score_closed_8(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """closed_8: Pride project -> 0-3"""
-        data_cols = IndicatorScorer._get_data_columns(row)
+        """closed_8: Pride project (count or yes/no) -> 0-2"""
+        values = IndicatorScorer._get_numeric_values(row)
 
-        # Try да/нет first
+        if values:
+            # Numeric version: count of representatives
+            count = values[0]
+            if count >= 1:
+                score = 2.0
+            else:
+                score = 0.0
+            logger.debug(f"closed_8: count={count}, score={score}")
+            return score
+
+        # Try да/нет
+        data_cols = IndicatorScorer._get_data_columns(row)
         for col in data_cols:
             val = row[col]
             if pd.notna(val):
                 val_str = str(val).strip().lower()
                 if val_str == 'да':
-                    logger.debug(f"closed_8: да -> 3.0")
-                    return 3.0
+                    logger.debug(f"closed_8: да -> 2.0")
+                    return 2.0
                 elif val_str == 'нет':
                     logger.debug(f"closed_8: нет -> 0.0")
                     return 0.0
 
-        # Try numeric
-        values = IndicatorScorer._get_numeric_values(row)
-        if values:
-            score = min(values[0] / 5, 3.0)
-            logger.debug(f"closed_8: value={values[0]}, score={score}")
-            return score
-
-        return None
+        logger.debug(f"closed_8: No data found, returning 0.0")
+        return 0.0
 
     # ============ PENALTY INDICATORS (pen_1 to pen_3) ============
 
     @staticmethod
     def score_pen_1(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pen_1: Regional conflicts (2 yes/no) -> -5 to +2"""
+        """pen_1: Regional conflicts (2 yes/no) -> -3 to +2"""
         data_cols = IndicatorScorer._get_data_columns(row)
         score = 0.0
         count = 0
@@ -381,40 +477,62 @@ class IndicatorScorer:
                 val_str = str(val).strip().lower()
                 if val_str == 'да':
                     if count == 0:
-                        score += -3.0  # Public conflict
+                        score += -3.0  # Public conflict with Governor
                     else:
-                        score += -2.0  # Professional conflict
+                        score += -2.0  # Conflict with regional ministry
                 elif val_str == 'нет':
                     score += 1.0
 
                 count += 1
 
-        if count < 2:
-            logger.debug(f"pen_1: Only found {count} да/нет values, need 2")
-            return None
+        if count == 0:
+            logger.debug(f"pen_1: No да/нет values found, returning 0")
+            return 0.0
 
-        logger.debug(f"pen_1: score={score}")
+        logger.debug(f"pen_1: count={count}, score={score}")
         return score
 
     @staticmethod
     def score_pen_2(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pen_2: Internal conflicts (count) -> -3 to +1"""
+        """pen_2: Internal conflicts (quarterly/annual counts + media) -> -3 to +1"""
         values = IndicatorScorer._get_numeric_values(row)
-        if not values:
-            return None
+        data_cols = IndicatorScorer._get_data_columns(row)
 
+        if not values:
+            logger.debug(f"pen_2: No numeric values found")
+            return 0.0
+
+        # First numeric: quarterly or annual count
         count = int(values[0])
-        if count >= 1:
-            score = -2.0
+        score = 0.0
+
+        # Systematic conflicts (1+ per quarter or 4+ per year) -> -3
+        if count >= 4 or (len(values) > 1 and values[1] >= 4):
+            score = -3.0
+        # Check for media mentions (да/нет)
         else:
-            score = 1.0
+            has_media = False
+            for col in data_cols:
+                val = row[col]
+                if pd.notna(val):
+                    val_str = str(val).strip().lower()
+                    if val_str == 'да':
+                        has_media = True
+                        break
+
+            if has_media:
+                score = -2.0  # Media coverage -> -2
+            elif count > 0:
+                score = -1.0  # Some conflicts without media
+            else:
+                score = 1.0  # No conflicts
 
         logger.debug(f"pen_2: count={count}, score={score}")
         return score
 
     @staticmethod
     def score_pen_3(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
-        """pen_3: Law enforcement data (3 yes/no) -> -8 to +3"""
+        """pen_3: Law enforcement data (3 yes/no) -> -5 to +3"""
         data_cols = IndicatorScorer._get_data_columns(row)
         score = 0.0
         count = 0
@@ -430,19 +548,19 @@ class IndicatorScorer:
                     if count == 0:
                         score += -5.0  # Criminal case
                     elif count == 1:
-                        score += -2.0  # Inspections
+                        score += -2.0  # Law enforcement checks
                     else:
-                        score += -1.0  # Publications
+                        score += -1.0  # Media publications
                 elif val_str == 'нет':
                     score += 1.0
 
                 count += 1
 
-        if count < 3:
-            logger.debug(f"pen_3: Only found {count} да/нет values, need 3")
-            return None
+        if count == 0:
+            logger.debug(f"pen_3: No да/нет values found, returning 0")
+            return 0.0
 
-        logger.debug(f"pen_3: score={score}")
+        logger.debug(f"pen_3: count={count}, score={score}")
         return score
 
     # ============ MAIN SCORING METHOD ============
@@ -454,19 +572,19 @@ class IndicatorScorer:
 
         if not scoring_func:
             logger.warning(f"No scoring function for {indicator_code}")
-            return None
+            return 0.0
 
         try:
             score = scoring_func(row, {})
 
-            if score is not None:
-                logger.info(f"{indicator_code}: score = {score}")
-            else:
-                logger.debug(f"{indicator_code}: returned None")
+            if score is None:
+                logger.warning(f"{indicator_code}: returned None, converting to 0.0")
+                return 0.0
 
+            logger.info(f"{indicator_code}: score = {score:.1f}")
             return score
         except Exception as e:
             logger.error(f"Error scoring {indicator_code}: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return None
+            return 0.0
