@@ -19,17 +19,47 @@ class IndicatorScorer:
     @staticmethod
     def _get_data_columns(row: pd.Series) -> list:
         """Get non-header columns (skip Муниципалитет, Глава МО, etc.)"""
-        skip_patterns = ['муниципалитет', 'глава', 'мо', 'fio', 'name', 'фио', '№', 'unnamed']
+        # Skip columns that are metadata/headers only
+        # Use word boundaries or exact matches for more precision
+        skip_patterns = [
+            'муниципалитет',    # exact municipality column
+            'глава мо',         # exact "head of MO" column
+            'фио',              # name (full name)
+            'name',             # english name
+            '№', 'no.',         # numbering columns
+            'unnamed',          # auto-generated unnamed columns
+            'index'             # index columns
+        ]
+
         data_cols = []
         for col in row.index:
             col_str = str(col).strip().lower()
-            # Skip if matches skip patterns
-            if any(skip.lower() in col_str for skip in skip_patterns):
+
+            # Check for exact matches or word-boundary matches
+            skip = False
+            for pattern in skip_patterns:
+                # For short patterns like 'мо', require word boundaries
+                if pattern in ['мо']:
+                    # Check if it's a whole word
+                    import re
+                    if re.search(r'\b' + re.escape(pattern) + r'\b', col_str):
+                        skip = True
+                        break
+                else:
+                    # For longer patterns, substring match is OK
+                    if pattern in col_str:
+                        skip = True
+                        break
+
+            if skip:
                 continue
+
             # Skip NaN columns
             if pd.isna(row[col]) or row[col] == '':
                 continue
+
             data_cols.append(col)
+
         return data_cols
 
     @staticmethod
