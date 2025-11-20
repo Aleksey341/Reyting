@@ -144,7 +144,7 @@ app.include_router(rating_routes_methodology.router, prefix="/api/rating", tags=
 app.include_router(indicator_routes.router, prefix="/api/indicators", tags=["indicators"])
 app.include_router(methodology_routes.router, prefix="/api/methodology", tags=["methodology"])
 app.include_router(upload_routes.router, prefix="/api/upload", tags=["upload"])
-app.include_router(data_import_routes.router, prefix="/api/import", tags=["data-import"])
+app.include_router(data_import_routes.router, prefix="/api/data-import", tags=["data-import"])
 app.include_router(data_cleanup_routes.router, prefix="/api/cleanup", tags=["data-cleanup"])
 app.include_router(admin_routes.router, prefix="/api/admin", tags=["admin"])
 
