@@ -353,6 +353,7 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
         # Read with proper header handling (skip merged cells, use row 1 as header)
         df = pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=1)
         logger.info(f"Sheet '{sheet_name}': {df.shape} - columns: {list(df.columns)}")
+        logger.debug(f"First 3 rows of sheet:\n{df.head(3)}")
 
         # Find municipality column (first column usually contains MO names)
         mo_col_name = None
