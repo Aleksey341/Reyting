@@ -295,26 +295,26 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
     """Process multi-sheet Excel format (one sheet per indicator with raw data)"""
 
     criterion_name_to_code = {
-        # PUBLIC
+        # PUBLIC CRITERIA (pub_1 to pub_9)
         "Оценка поддержки руководства": "pub_1",
         "Выполнение задач АГП": "pub_2",
         "Позиционирование главы МО": "pub_3",
         "Проектная деятельность": "pub_4",
         "Вовлеченность молодежи 1": "pub_5",
-        "Вовлеченность молодежи 2  ": "pub_6",  # Note: sheet name has trailing spaces
-        "Работа главы с ветеранам": "pub_7",
+        "Вовлеченность молодежи 2": "pub_6",
+        "Работа главы с ветеранами": "pub_7",
         "Кадровый управленческий резерв": "pub_8",
         "Работа с грантами": "pub_9",
-        # CLOSED
+        # CLOSED CRITERIA (closed_1 to closed_8)
         "Партийное мнение": "closed_1",
         "Альтернативное мнение": "closed_2",
         "Показатели АГП (Уровень)": "closed_3",
         "Показатели АГП (Качество)": "closed_4",
         "Экономическая привлекательность": "closed_5",
         "деятельность ветеранов СВО": "closed_7",
-        "Участие в проекте  ЛО": "closed_8",  # Note: sheet name has extra spaces
-        # PENALTY
-        "Конфликты с региональной  ВЛ": "pen_1",  # Note: sheet name has extra spaces
+        "Участие в проекте ЛО": "closed_8",
+        # PENALTY CRITERIA (pen_1 to pen_3)
+        "Конфликты с региональной ВЛ": "pen_1",
         "Внутримуниципальные конфликты": "pen_2",
         "Данные правоохранительных орган": "pen_3",
     }
