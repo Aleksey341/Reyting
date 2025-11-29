@@ -438,6 +438,41 @@ class IndicatorScorer:
         return None
 
     @staticmethod
+    def score_closed_6(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
+        """closed_6: Veterans activities/work (count meetings or yes/no) -> 0-3"""
+        values = IndicatorScorer._get_numeric_values(row)
+
+        if values:
+            # Numeric version: count of meetings/events
+            count = values[0]
+            if count >= 3:
+                score = 3.0
+            elif count >= 1:
+                score = count
+            else:
+                score = 0.0
+            logger.debug(f"closed_6: count={count}, score={score}")
+            return score
+
+        # Try да/нет approach
+        data_cols = IndicatorScorer._get_data_columns(row)
+        yes_count = 0
+        for col in data_cols:
+            val = row[col]
+            if pd.notna(val):
+                val_str = str(val).strip().lower()
+                if val_str == 'да':
+                    yes_count += 1
+
+        if yes_count > 0:
+            score = min(float(yes_count), 3.0)
+            logger.debug(f"closed_6: да count={yes_count}, score={score}")
+            return score
+
+        logger.debug(f"closed_6: No data found, returning 0.0")
+        return 0.0
+
+    @staticmethod
     def score_closed_7(row: pd.Series, col_mapping: dict = None) -> Optional[float]:
         """closed_7: Veterans political activity (% members + % supporters) -> 0-6"""
         values = IndicatorScorer._get_numeric_values(row)

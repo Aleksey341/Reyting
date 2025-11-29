@@ -93,9 +93,11 @@ async def import_official_methodology(
             db.refresh(period)
 
         # Official indicator codes
+        # NOTE: closed_6 is NOT in the Excel file from user, so we exclude it from import
+        # Database schema includes closed_6 but the official Excel file doesn't have a sheet for it
         official_indicators = [
             'pub_1', 'pub_2', 'pub_3', 'pub_4', 'pub_5', 'pub_6', 'pub_7', 'pub_8', 'pub_9',
-            'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_6', 'closed_7', 'closed_8',
+            'closed_1', 'closed_2', 'closed_3', 'closed_4', 'closed_5', 'closed_7', 'closed_8',
             'pen_1', 'pen_2', 'pen_3'
         ]
 
@@ -136,10 +138,15 @@ async def import_official_methodology(
             "statistics": result,
             "period": period_month,
             "period_id": period.period_id,
-            "methodology": "Official 16 criteria",
+            "date_from": date_from,
+            "date_to": date_to,
+            "methodology_id": methodology.version_id,
+            "methodology": "Official 16 criteria (excluding closed_6 which is not in Excel file)",
+            "warning": "If scores show 0.0, check backend logs for 'Municipality X not found' or 'Could not score' messages",
             "next_steps": [
-                "1. Hard refresh Rating tab (Ctrl+F5)",
-                "2. Scores should display with proper aggregation"
+                "1. Check backend logs: docker-compose logs backend | grep 'UNIFIED IMPORT'",
+                "2. Hard refresh Rating tab (Ctrl+F5)",
+                "3. Scores should display with proper aggregation"
             ]
         }
 
@@ -336,15 +343,16 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
                     break
 
             if not matched:
-                logger.warning(f"Sheet '{sheet_name}' -> NO MATCH")
+                logger.warning(f"Sheet '{sheet_name}' -> NO MATCH (will be skipped)")
 
+    logger.info(f"Successfully mapped {len(sheet_to_code)} out of {len(sheet_names)} sheets")
     values_loaded = 0
     total_rows_processed = 0
 
     # Process each sheet
     for sheet_name in sheet_names:
         if sheet_name not in sheet_to_code:
-            logger.info(f"Skipping sheet '{sheet_name}' - no matching criterion code")
+            logger.debug(f"Skipping sheet '{sheet_name}' - no matching criterion code")
             continue
 
         indicator_code = sheet_to_code[sheet_name]
@@ -397,7 +405,7 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
             ).params(name=f"%{mo_name}%").first()
 
             if not mo:
-                logger.warning(f"Municipality '{mo_name}' not found")
+                logger.warning(f"Municipality '{mo_name}' not found in database")
                 continue
 
             # Use IndicatorScorer to calculate score from raw data
@@ -422,6 +430,7 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
 
             if existing:
                 existing.score = value_float
+                logger.debug(f"Updated fact_indicator: mo_id={mo.mo_id}, ind_id={indicator.ind_id}, score={value_float}")
             else:
                 fact = FactIndicator(
                     mo_id=mo.mo_id,
@@ -431,6 +440,7 @@ def _process_multisheet_format(content, xls, sheet_names, db, period, methodolog
                     score=value_float,
                 )
                 db.add(fact)
+                logger.debug(f"Created new fact_indicator: mo_id={mo.mo_id}, ind_id={indicator.ind_id}, period_id={period.period_id}, score={value_float}")
 
             values_loaded += 1
 
