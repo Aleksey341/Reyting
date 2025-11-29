@@ -135,22 +135,6 @@ export default function InteractiveMap({ data, onMunicipalityClick }) {
   const onEachFeature = (feature, layer) => {
     const { name, score, zone } = feature.properties;
 
-    // Check if data exists
-    const hasData = zone && score != null;
-    const displayScore = hasData ? score.toFixed(1) : 'Нет данных';
-    const displayZone = hasData ? `<span style="color: ${getZoneColor(zone)};">${getZoneLabel(zone)}</span>` : '<span style="color: #9e9e9e;">Нет данных</span>';
-
-    // Popup content
-    layer.bindPopup(`
-      <div style="padding: 8px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">${name}</h3>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 4px 0;"><strong>Балл:</strong> ${displayScore}</p>
-          <p style="margin: 4px 0;"><strong>Зона:</strong> ${displayZone}</p>
-        </div>
-      </div>
-    `);
-
     // Permanent label with municipality name
     layer.bindTooltip(name, {
       permanent: true,
